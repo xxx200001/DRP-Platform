@@ -1,0 +1,431 @@
+# =============================================================================
+# 检验指标参考区间 + 校验规则总表
+# =============================================================================
+# 【上线前必须做的事 —— 算法负责人签字确认】
+#
+# 下面的参考区间取自 WS/T 404《临床常用生化检验项目参考区间》系列行标 与
+# 全国临床检验操作规程通用值，只能当作 **冷启动默认值**。
+#
+# 参考区间受仪器、试剂厂商、检测方法、地域人群影响，实验室之间差异可以到
+# 20% 以上。偏离度特征（deviation）直接建立在参考区间之上，区间错了，
+# 整个 2.2 节的临床衍生特征全部带偏，而且这种错误在训练集上看不出来
+# （因为训练集同样带偏），只会在换医院、换检验科的时候线上暴雷。
+#
+# 上线前必须用合作医院检验科出具的本院参考区间覆盖本文件，并按
+# lab_id 维度做多版本管理（见 reference.py 的 lab_id 参数）。
+#
+# 字段说明:
+#   aliases           OCR/结构化归一化词典入口（规范 4.1），大小写与空格不敏感
+#   canonical_unit    平台内部唯一单位，所有数据入库前强制换算到此单位
+#   unit_conversions  外部单位 -> canonical 的乘法因子
+#   plausible_range   生理极限。超出直接判 INVALID 拒绝入模（规范 4.1）
+#   magnitude_fix     是否允许 x1000 / /1000 量级自动纠错
+#   critical          危急值，触发后走告警通道，不参与常规分级
+#   grade_multiplier  异常分级边界，倍数相对参考区间上限/下限
+#   cv_intra          个体内生物学变异系数（Ricós 生物学变异数据库）
+#   cv_analytical     分析变异系数，用于计算 RCV 判定"变化是否真实"
+#   log_transform     右偏指标建议对数化后再算趋势斜率
+#   reference         分层参考区间，匹配时取最具体的一条
+# =============================================================================
+
+version: "2024.1-default"
+source: "WS/T 404.1~404.8 / 全国临床检验操作规程(第4版) / Ricós biological variation database"
+lab_id: "__DEFAULT__"
+
+defaults:
+  magnitude_fix: true
+  log_transform: false
+  cv_intra: 0.10
+  cv_analytical: 0.05
+  grade_multiplier: { mild: 1.0, moderate: 2.0, severe: 3.0 }
+
+indicators:
+
+  # ------------------------- 肝功能 -------------------------
+  ALT:
+    name_cn: 丙氨酸氨基转移酶
+    aliases: [ALT, GPT, 谷丙转氨酶, 丙氨酸氨基转移酶, "ALT(GPT)"]
+    canonical_unit: U/L
+    plausible_range: [0, 20000]
+    critical: { high: 1000 }
+    grade_multiplier: { mild: 1.0, moderate: 3.0, severe: 10.0 }
+    cv_intra: 0.194
+    cv_analytical: 0.05
+    log_transform: true
+    reference:
+      - { sex: M, age: [18, 120], lower: 9, upper: 50 }
+      - { sex: F, age: [18, 120], lower: 7, upper: 40 }
+      - { sex: ANY, age: [0, 18], lower: 5, upper: 45 }
+
+  AST:
+    name_cn: 天门冬氨酸氨基转移酶
+    aliases: [AST, GOT, 谷草转氨酶, 天门冬氨酸氨基转移酶, "AST(GOT)"]
+    canonical_unit: U/L
+    plausible_range: [0, 20000]
+    critical: { high: 1000 }
+    grade_multiplier: { mild: 1.0, moderate: 3.0, severe: 10.0 }
+    cv_intra: 0.119
+    cv_analytical: 0.05
+    log_transform: true
+    reference:
+      - { sex: M, age: [18, 120], lower: 15, upper: 40 }
+      - { sex: F, age: [18, 120], lower: 13, upper: 35 }
+
+  GGT:
+    name_cn: γ-谷氨酰转移酶
+    aliases: [GGT, "γ-GT", GT, 谷氨酰转肽酶, "γ-谷氨酰转移酶", r-GT]
+    canonical_unit: U/L
+    plausible_range: [0, 5000]
+    grade_multiplier: { mild: 1.0, moderate: 3.0, severe: 10.0 }
+    cv_intra: 0.134
+    log_transform: true
+    reference:
+      - { sex: M, age: [18, 120], lower: 10, upper: 60 }
+      - { sex: F, age: [18, 120], lower: 7, upper: 45 }
+
+  ALP:
+    name_cn: 碱性磷酸酶
+    aliases: [ALP, AKP, 碱性磷酸酶]
+    canonical_unit: U/L
+    plausible_range: [0, 3000]
+    cv_intra: 0.065
+    reference:
+      - { sex: M, age: [18, 120], lower: 45, upper: 125 }
+      - { sex: F, age: [18, 50], lower: 35, upper: 100 }
+      - { sex: F, age: [50, 120], lower: 50, upper: 135 }
+
+  TBIL:
+    name_cn: 总胆红素
+    aliases: [TBIL, TBil, T-BIL, 总胆红素, STB]
+    canonical_unit: umol/L
+    unit_conversions: { "mg/dL": 17.104, "mg/dl": 17.104 }
+    plausible_range: [0, 1000]
+    critical: { high: 342 }
+    grade_multiplier: { mild: 1.0, moderate: 2.5, severe: 5.0 }
+    cv_intra: 0.218
+    log_transform: true
+    reference:
+      - { sex: ANY, age: [18, 120], lower: 3.4, upper: 20.5 }
+
+  DBIL:
+    name_cn: 直接胆红素
+    aliases: [DBIL, DBil, D-BIL, 直接胆红素, 结合胆红素]
+    canonical_unit: umol/L
+    unit_conversions: { "mg/dL": 17.104 }
+    plausible_range: [0, 800]
+    cv_intra: 0.36
+    log_transform: true
+    reference:
+      - { sex: ANY, age: [18, 120], lower: 0.0, upper: 6.8 }
+
+  ALB:
+    name_cn: 白蛋白
+    aliases: [ALB, 白蛋白, Alb, 血清白蛋白]
+    canonical_unit: g/L
+    unit_conversions: { "g/dL": 10.0, "g/dl": 10.0 }
+    plausible_range: [5, 80]
+    critical: { low: 15 }
+    cv_intra: 0.032
+    reference:
+      - { sex: ANY, age: [18, 60], lower: 40, upper: 55 }
+      - { sex: ANY, age: [60, 120], lower: 34, upper: 48 }
+
+  TP:
+    name_cn: 总蛋白
+    aliases: [TP, 总蛋白, 血清总蛋白]
+    canonical_unit: g/L
+    unit_conversions: { "g/dL": 10.0 }
+    plausible_range: [10, 150]
+    cv_intra: 0.027
+    reference:
+      - { sex: ANY, age: [18, 120], lower: 65, upper: 85 }
+
+  # ------------------------- 肾功能 -------------------------
+  CREA:
+    name_cn: 肌酐
+    aliases: [CREA, Cr, CRE, SCr, 肌酐, 血肌酐, 血清肌酐]
+    canonical_unit: umol/L
+    unit_conversions: { "mg/dL": 88.4, "mg/dl": 88.4 }
+    plausible_range: [10, 3000]
+    critical: { high: 707 }
+    grade_multiplier: { mild: 1.0, moderate: 1.5, severe: 3.0 }
+    cv_intra: 0.053
+    cv_analytical: 0.03
+    reference:
+      - { sex: M, age: [18, 120], lower: 57, upper: 97 }
+      - { sex: F, age: [18, 120], lower: 41, upper: 73 }
+
+  UREA:
+    name_cn: 尿素
+    aliases: [UREA, BUN, Urea, 尿素, 尿素氮, 血尿素氮]
+    canonical_unit: mmol/L
+    unit_conversions: { "mg/dL": 0.357, "mg/dl": 0.357 }
+    plausible_range: [0.3, 100]
+    critical: { high: 35.7 }
+    cv_intra: 0.123
+    reference:
+      - { sex: M, age: [18, 60], lower: 3.1, upper: 8.0 }
+      - { sex: F, age: [18, 60], lower: 2.6, upper: 7.5 }
+      - { sex: ANY, age: [60, 120], lower: 3.6, upper: 9.5 }
+
+  UA:
+    name_cn: 尿酸
+    aliases: [UA, URIC, 尿酸, 血尿酸]
+    canonical_unit: umol/L
+    unit_conversions: { "mg/dL": 59.48 }
+    plausible_range: [30, 1800]
+    grade_multiplier: { mild: 1.0, moderate: 1.4, severe: 1.8 }
+    cv_intra: 0.086
+    reference:
+      - { sex: M, age: [18, 120], lower: 208, upper: 428 }
+      - { sex: F, age: [18, 120], lower: 155, upper: 357 }
+
+  UACR:
+    name_cn: 尿白蛋白肌酐比
+    aliases: [UACR, ACR, 尿微量白蛋白肌酐比, 尿白蛋白肌酐比值]
+    canonical_unit: mg/g
+    unit_conversions: { "mg/mmol": 8.84 }
+    plausible_range: [0, 30000]
+    grade_multiplier: { mild: 1.0, moderate: 10.0, severe: 100.0 }
+    cv_intra: 0.30
+    log_transform: true
+    reference:
+      - { sex: ANY, age: [0, 120], lower: 0.0, upper: 30 }
+
+  # ------------------------- 血糖 / 代谢 -------------------------
+  GLU:
+    name_cn: 空腹血糖
+    aliases: [GLU, FPG, FBG, Glu, 空腹血糖, 葡萄糖, 血糖]
+    canonical_unit: mmol/L
+    unit_conversions: { "mg/dL": 0.05551, "mg/dl": 0.05551 }
+    plausible_range: [0.5, 60]
+    critical: { low: 2.8, high: 22.2 }
+    grade_multiplier: { mild: 1.15, moderate: 1.8, severe: 2.5 }
+    cv_intra: 0.057
+    reference:
+      - { sex: ANY, age: [18, 120], lower: 3.9, upper: 6.1 }
+
+  HBA1C:
+    name_cn: 糖化血红蛋白
+    aliases: [HBA1C, HbA1c, A1c, 糖化血红蛋白, GHb]
+    canonical_unit: "%"
+    plausible_range: [2.0, 20.0]
+    magnitude_fix: false
+    grade_multiplier: { mild: 1.05, moderate: 1.4, severe: 1.7 }
+    cv_intra: 0.019
+    cv_analytical: 0.02
+    reference:
+      - { sex: ANY, age: [18, 120], lower: 4.0, upper: 6.0 }
+
+  INS:
+    name_cn: 空腹胰岛素
+    aliases: [INS, FINS, 空腹胰岛素, 胰岛素]
+    canonical_unit: uIU/mL
+    unit_conversions: { "pmol/L": 0.1443 }
+    plausible_range: [0.1, 500]
+    cv_intra: 0.21
+    log_transform: true
+    reference:
+      - { sex: ANY, age: [18, 120], lower: 2.6, upper: 24.9 }
+
+  # ------------------------- 血脂 -------------------------
+  TC:
+    name_cn: 总胆固醇
+    aliases: [TC, CHOL, TCHO, 总胆固醇, 胆固醇]
+    canonical_unit: mmol/L
+    unit_conversions: { "mg/dL": 0.02586 }
+    plausible_range: [0.5, 30]
+    grade_multiplier: { mild: 1.0, moderate: 1.35, severe: 1.55 }
+    cv_intra: 0.060
+    reference:
+      - { sex: ANY, age: [18, 120], lower: 2.8, upper: 5.2 }
+
+  TG:
+    name_cn: 甘油三酯
+    aliases: [TG, TRIG, 甘油三酯, 三酰甘油]
+    canonical_unit: mmol/L
+    unit_conversions: { "mg/dL": 0.01129 }
+    plausible_range: [0.1, 60]
+    critical: { high: 11.3 }
+    grade_multiplier: { mild: 1.0, moderate: 1.3, severe: 3.0 }
+    cv_intra: 0.199
+    log_transform: true
+    reference:
+      - { sex: ANY, age: [18, 120], lower: 0.45, upper: 1.70 }
+
+  HDLC:
+    name_cn: 高密度脂蛋白胆固醇
+    aliases: [HDLC, "HDL-C", HDL, 高密度脂蛋白, 高密度脂蛋白胆固醇]
+    canonical_unit: mmol/L
+    unit_conversions: { "mg/dL": 0.02586 }
+    plausible_range: [0.1, 5]
+    grade_multiplier: { mild: 1.0, moderate: 1.25, severe: 1.5 }
+    cv_intra: 0.073
+    reference:
+      - { sex: M, age: [18, 120], lower: 1.04, upper: 2.10 }
+      - { sex: F, age: [18, 120], lower: 1.16, upper: 2.30 }
+
+  LDLC:
+    name_cn: 低密度脂蛋白胆固醇
+    aliases: [LDLC, "LDL-C", LDL, 低密度脂蛋白, 低密度脂蛋白胆固醇]
+    canonical_unit: mmol/L
+    unit_conversions: { "mg/dL": 0.02586 }
+    plausible_range: [0.1, 20]
+    grade_multiplier: { mild: 1.0, moderate: 1.25, severe: 1.4 }
+    cv_intra: 0.083
+    reference:
+      - { sex: ANY, age: [18, 120], lower: 1.50, upper: 3.40 }
+
+  # ------------------------- 血常规 -------------------------
+  WBC:
+    name_cn: 白细胞计数
+    aliases: [WBC, 白细胞, 白细胞计数]
+    canonical_unit: 10^9/L
+    unit_conversions: { "/uL": 0.001, "/ul": 0.001, "10^3/uL": 1.0, "K/uL": 1.0 }
+    plausible_range: [0.05, 500]
+    critical: { low: 1.5, high: 30 }
+    cv_intra: 0.109
+    reference:
+      - { sex: ANY, age: [18, 120], lower: 3.5, upper: 9.5 }
+
+  NEUT:
+    name_cn: 中性粒细胞绝对值
+    aliases: [NEUT, "NEUT#", "NEUT%", "NE%", "NEUT-PCT", NE, 中性粒细胞, 中性粒细胞绝对值, 中性粒细胞百分比, 中性粒细胞比率]
+    canonical_unit: 10^9/L
+    plausible_range: [0.0, 200]
+    critical: { low: 0.5 }
+    cv_intra: 0.16
+    reference:
+      - { sex: ANY, age: [18, 120], lower: 1.8, upper: 6.3 }
+
+  LYMPH:
+    name_cn: 淋巴细胞绝对值
+    aliases: [LYMPH, "LYMPH#", "LYMPH%", "LY%", LY, 淋巴细胞, 淋巴细胞绝对值, 淋巴细胞百分比]
+    canonical_unit: 10^9/L
+    plausible_range: [0.0, 200]
+    cv_intra: 0.10
+    reference:
+      - { sex: ANY, age: [18, 120], lower: 1.1, upper: 3.2 }
+
+  PLT:
+    name_cn: 血小板计数
+    aliases: [PLT, 血小板, 血小板计数]
+    canonical_unit: 10^9/L
+    unit_conversions: { "/uL": 0.001, "10^3/uL": 1.0, "K/uL": 1.0 }
+    plausible_range: [1, 3000]
+    critical: { low: 20, high: 1000 }
+    grade_multiplier: { mild: 1.0, moderate: 1.3, severe: 1.6 }
+    cv_intra: 0.091
+    reference:
+      - { sex: ANY, age: [18, 120], lower: 125, upper: 350 }
+
+  HGB:
+    name_cn: 血红蛋白
+    aliases: [HGB, Hb, HB, 血红蛋白]
+    canonical_unit: g/L
+    unit_conversions: { "g/dL": 10.0 }
+    plausible_range: [10, 300]
+    critical: { low: 50 }
+    grade_multiplier: { mild: 1.0, moderate: 1.15, severe: 1.35 }
+    cv_intra: 0.028
+    reference:
+      - { sex: M, age: [18, 120], lower: 130, upper: 175 }
+      - { sex: F, age: [18, 120], lower: 115, upper: 150 }
+
+  RBC:
+    name_cn: 红细胞计数
+    aliases: [RBC, 红细胞, 红细胞计数]
+    canonical_unit: 10^12/L
+    plausible_range: [0.5, 12]
+    cv_intra: 0.033
+    reference:
+      - { sex: M, age: [18, 120], lower: 4.3, upper: 5.8 }
+      - { sex: F, age: [18, 120], lower: 3.8, upper: 5.1 }
+
+  # ------------------------- 电解质 -------------------------
+  K:
+    name_cn: 血钾
+    aliases: [K, "K+", 钾, 血钾, 血清钾]
+    canonical_unit: mmol/L
+    plausible_range: [1.0, 10.0]
+    magnitude_fix: false
+    critical: { low: 2.8, high: 6.5 }
+    grade_multiplier: { mild: 1.0, moderate: 1.1, severe: 1.2 }
+    cv_intra: 0.048
+    cv_analytical: 0.02
+    reference:
+      - { sex: ANY, age: [18, 120], lower: 3.5, upper: 5.3 }
+
+  NA:
+    name_cn: 血钠
+    aliases: [NA, "Na+", 钠, 血钠, 血清钠]
+    canonical_unit: mmol/L
+    plausible_range: [90, 200]
+    magnitude_fix: false
+    critical: { low: 120, high: 160 }
+    grade_multiplier: { mild: 1.0, moderate: 1.03, severe: 1.06 }
+    cv_intra: 0.007
+    cv_analytical: 0.01
+    reference:
+      - { sex: ANY, age: [18, 120], lower: 137, upper: 147 }
+
+  CA:
+    name_cn: 血钙
+    aliases: [CA, "Ca2+", 钙, 血钙, 总钙]
+    canonical_unit: mmol/L
+    unit_conversions: { "mg/dL": 0.2495 }
+    plausible_range: [0.5, 6.0]
+    magnitude_fix: false
+    critical: { low: 1.5, high: 3.5 }
+    cv_intra: 0.021
+    reference:
+      - { sex: ANY, age: [18, 120], lower: 2.11, upper: 2.52 }
+
+  # ------------------------- 炎症 / 其他 -------------------------
+  CRP:
+    name_cn: C反应蛋白
+    aliases: [CRP, hsCRP, "hs-CRP", C反应蛋白, 超敏C反应蛋白]
+    canonical_unit: mg/L
+    unit_conversions: { "mg/dL": 10.0 }
+    plausible_range: [0, 1000]
+    grade_multiplier: { mild: 1.0, moderate: 5.0, severe: 10.0 }
+    cv_intra: 0.42
+    log_transform: true
+    reference:
+      - { sex: ANY, age: [0, 120], lower: 0.0, upper: 10.0 }
+
+  SBP:
+    name_cn: 收缩压
+    aliases: [SBP, 收缩压, 高压]
+    canonical_unit: mmHg
+    plausible_range: [50, 300]
+    magnitude_fix: false
+    critical: { high: 180 }
+    grade_multiplier: { mild: 1.0, moderate: 1.15, severe: 1.30 }
+    cv_intra: 0.075
+    reference:
+      - { sex: ANY, age: [18, 120], lower: 90, upper: 139 }
+
+  DBP:
+    name_cn: 舒张压
+    aliases: [DBP, 舒张压, 低压]
+    canonical_unit: mmHg
+    plausible_range: [20, 200]
+    magnitude_fix: false
+    critical: { high: 110 }
+    grade_multiplier: { mild: 1.0, moderate: 1.15, severe: 1.30 }
+    cv_intra: 0.075
+    reference:
+      - { sex: ANY, age: [18, 120], lower: 60, upper: 89 }
+
+  BMI:
+    name_cn: 体质指数
+    aliases: [BMI, 体质指数, 体重指数]
+    canonical_unit: kg/m^2
+    plausible_range: [8, 90]
+    magnitude_fix: false
+    # 中国成人标准: 18.5-23.9 正常, 24-27.9 超重, >=28 肥胖
+    grade_multiplier: { mild: 1.0, moderate: 1.17, severe: 1.34 }
+    cv_intra: 0.03
+    reference:
+      - { sex: ANY, age: [18, 120], lower: 18.5, upper: 23.9 }

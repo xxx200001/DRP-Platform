@@ -1,0 +1,219 @@
+# =============================================================================
+# 干扰因子配置（规范 2.4：干扰因子剔除）
+# =============================================================================
+# 规范要求：
+#   - 用药标记、近期感染标记、熬夜/临时异常干扰权重降级
+#   - 模型特征层区分：一过性异常 vs 持续性异常
+#
+# 【为什么必须做这一层】
+# 一个正在吃他汀的人，LDL-C 2.0 mmol/L 看起来非常健康。但这是药物压下来的，
+# 他的真实基线风险可能很高。如果不标记用药状态，模型会学到"LDL 低=低风险"，
+# 然后对所有服药人群系统性低估风险——而服药人群恰恰是心血管事件的高发人群。
+# 这是医疗 ML 里的经典 treatment paradox，不处理会导致模型在最需要它的人群上失效。
+#
+# 正确做法不是"剔除"这些样本（那会丢掉大量数据且引入选择偏倚），而是：
+#   1. 把用药状态本身作为特征喂进去
+#   2. 给受影响指标打上 confounded 标记
+#   3. 给受影响指标计算 reliability 权重，供模型区分"真实低值"和"药物压低值"
+#
+# affects 字段说明：
+#   indicator: 受影响指标
+#   direction: down=药物使其降低, up=药物使其升高
+#   strength:  0~1，影响强度，用于计算 reliability 权重
+# =============================================================================
+
+version: "2024.1"
+
+medication_classes:
+
+  statin:
+    name_cn: 他汀类调脂药
+    keywords: [他汀, statin, 阿托伐他汀, 瑞舒伐他汀, 辛伐他汀, 匹伐他汀, 氟伐他汀, atorvastatin, rosuvastatin, simvastatin]
+    affects:
+      - { indicator: LDLC, direction: down, strength: 0.9 }
+      - { indicator: TC, direction: down, strength: 0.8 }
+      - { indicator: nonHDLC, direction: down, strength: 0.8 }
+      - { indicator: ALT, direction: up, strength: 0.3 }
+      - { indicator: AST, direction: up, strength: 0.3 }
+
+  fibrate:
+    name_cn: 贝特类
+    keywords: [贝特, fibrate, 非诺贝特, 苯扎贝特, fenofibrate]
+    affects:
+      - { indicator: TG, direction: down, strength: 0.85 }
+      - { indicator: HDLC, direction: up, strength: 0.4 }
+      - { indicator: CREA, direction: up, strength: 0.3 }
+
+  metformin:
+    name_cn: 二甲双胍
+    keywords: [二甲双胍, metformin, 格华止]
+    affects:
+      - { indicator: GLU, direction: down, strength: 0.7 }
+      - { indicator: HBA1C, direction: down, strength: 0.7 }
+
+  insulin_or_secretagogue:
+    name_cn: 胰岛素/促泌剂
+    keywords: [胰岛素, insulin, 格列, 瑞格列奈, 那格列奈, 甘精, 门冬, glimepiride, gliclazide]
+    affects:
+      - { indicator: GLU, direction: down, strength: 0.9 }
+      - { indicator: HBA1C, direction: down, strength: 0.8 }
+      - { indicator: INS, direction: up, strength: 0.95 }
+      - { indicator: HOMA_IR, direction: up, strength: 0.9 }
+
+  sglt2:
+    name_cn: SGLT-2抑制剂
+    keywords: [格列净, dapagliflozin, empagliflozin, 达格列净, 恩格列净, canagliflozin]
+    affects:
+      - { indicator: GLU, direction: down, strength: 0.6 }
+      - { indicator: HBA1C, direction: down, strength: 0.6 }
+      - { indicator: CREA, direction: up, strength: 0.3 }
+      - { indicator: UA, direction: down, strength: 0.4 }
+
+  diuretic:
+    name_cn: 利尿剂
+    keywords: [氢氯噻嗪, 呋塞米, 螺内酯, 托拉塞米, 吲达帕胺, furosemide, spironolactone, hydrochlorothiazide]
+    affects:
+      - { indicator: K, direction: down, strength: 0.7 }
+      - { indicator: NA, direction: down, strength: 0.5 }
+      - { indicator: UA, direction: up, strength: 0.6 }
+      - { indicator: UREA, direction: up, strength: 0.5 }
+      - { indicator: CREA, direction: up, strength: 0.4 }
+
+  acei_arb:
+    name_cn: ACEI/ARB类降压药
+    keywords: [普利, 沙坦, 依那普利, 缬沙坦, 氯沙坦, 培哚普利, enalapril, valsartan, losartan]
+    affects:
+      - { indicator: K, direction: up, strength: 0.5 }
+      - { indicator: CREA, direction: up, strength: 0.4 }
+      - { indicator: SBP, direction: down, strength: 0.8 }
+      - { indicator: DBP, direction: down, strength: 0.8 }
+      - { indicator: UACR, direction: down, strength: 0.6 }
+
+  ccb_beta_blocker:
+    name_cn: 钙拮抗剂/β受体阻滞剂
+    keywords: [地平, 洛尔, 氨氯地平, 美托洛尔, 比索洛尔, amlodipine, metoprolol, bisoprolol]
+    affects:
+      - { indicator: SBP, direction: down, strength: 0.8 }
+      - { indicator: DBP, direction: down, strength: 0.8 }
+
+  urate_lowering:
+    name_cn: 降尿酸药
+    keywords: [别嘌醇, 非布司他, 苯溴马隆, allopurinol, febuxostat, benzbromarone]
+    affects:
+      - { indicator: UA, direction: down, strength: 0.9 }
+
+  hepatoprotective:
+    name_cn: 保肝降酶药
+    keywords: [水飞蓟, 甘草酸, 双环醇, 多烯磷脂酰胆碱, 联苯双酯, 谷胱甘肽]
+    affects:
+      - { indicator: ALT, direction: down, strength: 0.7 }
+      - { indicator: AST, direction: down, strength: 0.6 }
+      - { indicator: GGT, direction: down, strength: 0.4 }
+
+  corticosteroid:
+    name_cn: 糖皮质激素
+    keywords: [泼尼松, 地塞米松, 甲泼尼龙, 强的松, prednisone, dexamethasone, methylprednisolone]
+    affects:
+      - { indicator: GLU, direction: up, strength: 0.7 }
+      - { indicator: WBC, direction: up, strength: 0.6 }
+      - { indicator: NEUT, direction: up, strength: 0.7 }
+      - { indicator: LYMPH, direction: down, strength: 0.6 }
+      - { indicator: K, direction: down, strength: 0.4 }
+
+  antiviral_hbv:
+    name_cn: 抗乙肝病毒药
+    keywords: [恩替卡韦, 替诺福韦, 富马酸, entecavir, tenofovir, 拉米夫定]
+    affects:
+      - { indicator: ALT, direction: down, strength: 0.8 }
+      - { indicator: AST, direction: down, strength: 0.7 }
+      - { indicator: CREA, direction: up, strength: 0.3 }
+
+  anticoagulant_antiplatelet:
+    name_cn: 抗凝/抗血小板药
+    keywords: [华法林, 阿司匹林, 氯吡格雷, 利伐沙班, 达比加群, warfarin, aspirin, clopidogrel]
+    affects:
+      - { indicator: PLT, direction: down, strength: 0.3 }
+      - { indicator: HGB, direction: down, strength: 0.3 }
+
+# ---------------------------------------------------------------------------
+# 急性状态判定规则
+# ---------------------------------------------------------------------------
+acute_states:
+
+  infection:
+    name_cn: 近期感染/急性炎症
+    window_days: 14
+    # 满足任意一条即判定为感染状态
+    triggers:
+      - { indicator: CRP, op: ">", value: 20.0 }
+      - { indicator: WBC, op: ">", value: 11.0 }
+      - { indicator: NEUT, op: ">", value: 7.5 }
+    # 感染期间以下指标不可靠，权重降级
+    unreliable:
+      - { indicator: ALB, strength: 0.7 }     # 急性期负相蛋白，感染时下降
+      - { indicator: HDLC, strength: 0.7 }    # 急性期显著下降
+      - { indicator: TC, strength: 0.5 }
+      - { indicator: LDLC, strength: 0.5 }
+      - { indicator: GLU, strength: 0.5 }     # 应激性高血糖
+      - { indicator: WBC, strength: 0.9 }
+      - { indicator: NEUT, strength: 0.9 }
+      - { indicator: LYMPH, strength: 0.8 }
+      - { indicator: PLT, strength: 0.5 }
+      - { indicator: CRP, strength: 0.95 }
+
+  acute_liver_injury:
+    name_cn: 急性肝损伤
+    window_days: 30
+    triggers:
+      - { indicator: ALT, op: ">", value: 200.0 }
+      - { indicator: AST, op: ">", value: 200.0 }
+    unreliable:
+      - { indicator: ALT, strength: 0.8 }
+      - { indicator: AST, strength: 0.8 }
+      - { indicator: TBIL, strength: 0.6 }
+      - { indicator: ALB, strength: 0.4 }
+
+  acute_kidney_injury:
+    name_cn: 急性肾损伤
+    window_days: 30
+    # AKI 用相对变化判定（KDIGO: 7天内肌酐升高 >=1.5 倍），
+    # 在代码里通过 temporal 特征实现，此处仅保留绝对值兜底
+    triggers:
+      - { indicator: CREA, op: ">", value: 200.0 }
+    unreliable:
+      - { indicator: CREA, strength: 0.85 }
+      - { indicator: UREA, strength: 0.8 }
+      - { indicator: eGFR, strength: 0.85 }
+      - { indicator: K, strength: 0.6 }
+
+# ---------------------------------------------------------------------------
+# 生理状态标记（非疾病，但显著影响指标解读）
+# ---------------------------------------------------------------------------
+physiological_states:
+  pregnancy:
+    name_cn: 妊娠
+    unreliable:
+      - { indicator: HGB, strength: 0.8 }     # 血液稀释
+      - { indicator: ALB, strength: 0.8 }
+      - { indicator: CREA, strength: 0.7 }    # GFR 生理性升高
+      - { indicator: TG, strength: 0.9 }      # 生理性显著升高
+      - { indicator: TC, strength: 0.8 }
+      - { indicator: ALP, strength: 0.9 }     # 胎盘来源
+      - { indicator: UA, strength: 0.6 }
+
+  strenuous_exercise:
+    name_cn: 近期剧烈运动
+    window_days: 3
+    unreliable:
+      - { indicator: AST, strength: 0.7 }     # 骨骼肌来源
+      - { indicator: CREA, strength: 0.5 }
+      - { indicator: UA, strength: 0.5 }
+      - { indicator: WBC, strength: 0.4 }
+
+  non_fasting:
+    name_cn: 非空腹采血
+    unreliable:
+      - { indicator: GLU, strength: 0.95 }
+      - { indicator: TG, strength: 0.9 }
+      - { indicator: INS, strength: 0.9 }
+      - { indicator: TC, strength: 0.3 }
