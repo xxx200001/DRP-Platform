@@ -805,39 +805,46 @@ def _ocr_extract_image(image_b64: str) -> str:
                         x_max = float(np.max(pts[:, 0]))
                         y_max = float(np.max(pts[:, 1]))
                         y_center = (y_min + y_max) / 2.0
-                        height = max(y_max - y_min, 1.0)
-                        items.append({"text": txt, "x": x_min, "y": y_center, "h": height})
+                        items.append({
+                            "text": txt,
+                            "x_min": x_min,
+                            "y_min": y_min,
+                            "x_max": x_max,
+                            "y_max": y_max,
+                            "y_center": y_center,
+                            "h": height,
+                        })
 
                     if items:
-                        # 按 y 坐标排序
-                        items.sort(key=lambda it: it["y"])
-                        # 聚类为行
+                        # 按照 y_center 排序，基于垂直重叠度精确聚类行
+                        items.sort(key=lambda it: it["y_center"])
                         lines = []
-                        curr_line = []
-                        curr_y = None
-                        curr_h = None
                         for it in items:
-                            if curr_y is None:
-                                curr_line = [it]
-                                curr_y = it["y"]
-                                curr_h = it["h"]
-                            else:
-                                if abs(it["y"] - curr_y) < max(curr_h, it["h"]) * 0.65:
-                                    curr_line.append(it)
-                                    curr_y = float(np.mean([x["y"] for x in curr_line]))
-                                    curr_h = float(np.mean([x["h"] for x in curr_line]))
-                                else:
-                                    curr_line.sort(key=lambda x: x["x"])
-                                    lines.append("  ".join(x["text"] for x in curr_line))
-                                    curr_line = [it]
-                                    curr_y = it["y"]
-                                    curr_h = it["h"]
-                        if curr_line:
-                            curr_line.sort(key=lambda x: x["x"])
-                            lines.append("  ".join(x["text"] for x in curr_line))
+                            placed = False
+                            for line in lines:
+                                line_ymin = min(x["y_min"] for x in line)
+                                line_ymax = max(x["y_max"] for x in line)
+                                line_h = max(line_ymax - line_ymin, 1.0)
+                                overlap = max(0, min(it["y_max"], line_ymax) - max(it["y_min"], line_ymin))
+                                min_h = min(it["h"], line_h)
+                                if min_h > 0 and (overlap / min_h) >= 0.40:
+                                    line.append(it)
+                                    placed = True
+                                    break
+                            if not placed:
+                                lines.append([it])
 
-                        final_text = "\n".join(lines)
-                        logger.info("[OCR] RapidOCR 成功识别 %d 行文本", len(lines))
+                        # 按行纵向从上到下排序，行内横向从左到右排序
+                        lines.sort(key=lambda l: min(x["y_min"] for x in l))
+                        text_lines = []
+                        for line in lines:
+                            line.sort(key=lambda x: x["x_min"])
+                            line_text = "  ".join(x["text"] for x in line).strip()
+                            if line_text:
+                                text_lines.append(line_text)
+
+                        final_text = "\n".join(text_lines)
+                        logger.info("[OCR] RapidOCR 成功精确聚类识别 %d 行文本", len(text_lines))
                         return final_text
     except Exception as e:
         logger.warning("[OCR] RapidOCR 执行异常 (%s)，尝试 Vision 兜底...", e)

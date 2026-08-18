@@ -290,7 +290,7 @@ indicators:
 
   NEUT:
     name_cn: 中性粒细胞绝对值
-    aliases: [NEUT, "NEUT#", "NEUT%", "NE%", "NEUT-PCT", NE, 中性粒细胞, 中性粒细胞绝对值, 中性粒细胞百分比, 中性粒细胞比率]
+    aliases: [NEUT, "NEUT#", "NEUT%", "NE%", "NEUT-PCT", NE, GRAN, "GRAN%", "GRAN#", 中性粒细胞, 中性粒细胞绝对值, 中性粒细胞百分比, 中性粒细胞比率, 中性粒细胞比值, 粒细胞比率, 粒细胞比值]
     canonical_unit: 10^9/L
     plausible_range: [0.0, 200]
     critical: { low: 0.5 }
@@ -300,12 +300,20 @@ indicators:
 
   LYMPH:
     name_cn: 淋巴细胞绝对值
-    aliases: [LYMPH, "LYMPH#", "LYMPH%", "LY%", LY, 淋巴细胞, 淋巴细胞绝对值, 淋巴细胞百分比]
+    aliases: [LYMPH, "LYMPH#", "LYMPH%", "LY%", LY, LYM, "LYM%", "LYM#", 淋巴细胞, 淋巴细胞绝对值, 淋巴细胞百分比, 淋巴细胞比率, 淋巴细胞比值]
     canonical_unit: 10^9/L
     plausible_range: [0.0, 200]
     cv_intra: 0.10
     reference:
       - { sex: ANY, age: [18, 120], lower: 1.1, upper: 3.2 }
+
+  MONO:
+    name_cn: 单核细胞绝对值
+    aliases: [MONO, "MONO#", "MONO%", "MO%", MO, 单核细胞, 单核细胞绝对值, 单核细胞百分比, 单核细胞比率, 单核细胞比值]
+    canonical_unit: 10^9/L
+    plausible_range: [0.0, 50]
+    reference:
+      - { sex: ANY, age: [18, 120], lower: 0.1, upper: 0.8 }
 
   PLT:
     name_cn: 血小板计数

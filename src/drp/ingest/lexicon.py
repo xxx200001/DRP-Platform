@@ -146,7 +146,7 @@ class IndicatorLexicon:
         self._collisions = {k: tuple(sorted(v)) for k, v in folded_collisions.items()}
 
     # ------------------------------------------------------------------
-    def lookup(self, raw_name: str) -> LexiconMatch:
+    def _direct_lookup(self, raw_name: str) -> LexiconMatch:
         query = normalize_alias(raw_name)
         if not query:
             return LexiconMatch(None, 0.0, "none", query="")
@@ -184,6 +184,31 @@ class IndicatorLexicon:
             logger.info("模糊匹配歧义，拒绝: %r -> %s", raw_name, cands)
             return LexiconMatch(None, 0.0, "ambiguous", query=query, candidates=cands)
         return LexiconMatch(None, 0.0, "none", query=query)
+
+    def lookup(self, raw_name: str) -> LexiconMatch:
+        # 1. 尝试直接整串匹配
+        res = self._direct_lookup(raw_name)
+        if res.matched:
+            return res
+
+        # 2. 剥离行首序号如 1. 2、
+        import re
+        cleaned = re.sub(r"^\s*\d+[\.、:：\-\s]+\s*", "", raw_name).strip()
+        if cleaned and cleaned != raw_name:
+            res = self._direct_lookup(cleaned)
+            if res.matched:
+                return res
+
+        # 3. 拆分子词（空格、括号、斜杠），优先匹配括号或各独立单词
+        target = cleaned or raw_name
+        tokens = [t.strip(" ()[]（）【】:：·") for t in re.split(r"[\s/()（）\[\]]+", target) if t.strip(" ()[]（）【】:：·")]
+        for t in tokens:
+            if len(t) >= 2 or t in self.registry.codes:
+                res = self._direct_lookup(t)
+                if res.matched:
+                    return res
+
+        return res
 
 
 # ---------------------------------------------------------------------------
