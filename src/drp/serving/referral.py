@@ -97,7 +97,7 @@ DEPARTMENT_RULES: tuple[DeptRule, ...] = (
     ),
     DeptRule(
         "血常规", "血液内科",
-        ("WBC", "NEUT", "LYMPH", "PLT", "HGB", "RBC"),
+        ("WBC", "NEUT", "LYMPH", "MONO", "BASO", "EOS", "PLT", "HGB", "RBC", "HCT", "MCV", "MCH", "MCHC", "RDW"),
         ("血常规复查", "外周血细胞形态学检查"),
     ),
     DeptRule(

@@ -670,8 +670,42 @@ async function loadTrend() {
   sel.innerHTML = t.series.map((s, i) => `<option value="${i}">${esc(s.name_cn)}</option>`).join("");
   sel.onchange = () => drawSeries(t.series[+sel.value]);
   if (t.series.length) drawSeries(t.series[0]);
-
   $("#trendText").textContent = t.rendered_text;
+
+  // 渲染干预建议与应对方案卡片
+  const ivBox = $("#trendInterventionBox");
+  if (t.interventions && t.interventions.length) {
+    ivBox.innerHTML = t.interventions.map((it) => `
+      <div class="intervention-card ${it.level === '重点关注' ? 'alert-high' : 'alert-normal'}">
+        <div class="iv-header">
+          <div class="iv-title"><span class="iv-icon">${esc(it.icon)}</span> <strong>${esc(it.system)}</strong></div>
+          <span class="tag ${it.level === '重点关注' ? 't3' : 't2'}">${esc(it.level)}</span>
+        </div>
+        ${it.target_indicators && it.target_indicators.length ? `
+          <div class="iv-targets">
+            <span class="iv-lbl">关联指标：</span>
+            ${it.target_indicators.map((tg) => `<span class="iv-badge">${esc(tg)}</span>`).join("")}
+          </div>` : ""}
+        <div class="iv-grid">
+          <div class="iv-sec">
+            <div class="iv-sub">🥗 膳食调理办法</div>
+            <ul>${it.diet_advice.map((d) => `<li>${esc(d)}</li>`).join("")}</ul>
+          </div>
+          <div class="iv-sec">
+            <div class="iv-sub">🏃 运动与作息管理</div>
+            <ul>${it.lifestyle_advice.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>
+          </div>
+        </div>
+        <div class="iv-footer">
+          <div class="iv-cycle"><strong>🩺 复查跟踪周期：</strong>${esc(it.followup_cycle)}</div>
+          ${it.red_flags && it.red_flags.length ? `
+            <div class="iv-red"><strong>🚨 就医预警指征：</strong>${it.red_flags.map(esc).join("；")}</div>` : ""}
+        </div>
+      </div>
+    `).join("");
+  } else {
+    ivBox.innerHTML = `<div class="empty"><b>暂无干预建议</b>各项指标均在平稳健康范围</div>`;
+  }
 }
 
 function drawSeries(s) {
