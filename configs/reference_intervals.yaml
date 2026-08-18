@@ -350,6 +350,62 @@ indicators:
       - { sex: M, age: [18, 120], lower: 4.3, upper: 5.8 }
       - { sex: F, age: [18, 120], lower: 3.8, upper: 5.1 }
 
+  BASO:
+    name_cn: 嗜碱性粒细胞比值
+    aliases: [BASO, "BASO%", "BASO#", "BA%", BA, 嗜碱性粒细胞, 嗜碱性粒细胞比值, 嗜碱性粒细胞百分比, 嗜碱性粒细胞绝对值]
+    canonical_unit: "%"
+    plausible_range: [0.0, 10.0]
+    reference:
+      - { sex: ANY, age: [18, 120], lower: 0.0, upper: 1.0 }
+
+  EOS:
+    name_cn: 嗜酸性粒细胞比值
+    aliases: [EOS, "EOS%", "EOS#", "EO%", "E0%", EO, E0, 嗜酸性粒细胞, 嗜酸性粒细胞比值, 嗜酸性粒细胞百分比, 嗜酸性粒细胞绝对值]
+    canonical_unit: "%"
+    plausible_range: [0.0, 30.0]
+    reference:
+      - { sex: ANY, age: [18, 120], lower: 0.4, upper: 8.0 }
+
+  HCT:
+    name_cn: 红细胞压积
+    aliases: [HCT, 红细胞压积, 红细胞比容]
+    canonical_unit: "%"
+    plausible_range: [10.0, 80.0]
+    reference:
+      - { sex: ANY, age: [18, 120], lower: 40.0, upper: 50.0 }
+
+  MCV:
+    name_cn: 平均红细胞体积
+    aliases: [MCV, 平均红细胞体积]
+    canonical_unit: fL
+    plausible_range: [40.0, 160.0]
+    reference:
+      - { sex: ANY, age: [18, 120], lower: 82.0, upper: 100.0 }
+
+  MCH:
+    name_cn: 平均红细胞血红蛋白量
+    aliases: [MCH, 平均红细胞血红蛋白量]
+    canonical_unit: pg
+    plausible_range: [10.0, 60.0]
+    reference:
+      - { sex: ANY, age: [18, 120], lower: 27.0, upper: 34.0 }
+
+  MCHC:
+    name_cn: 平均红细胞血红蛋白浓度
+    aliases: [MCHC, 平均红细胞血红蛋白浓度]
+    canonical_unit: g/L
+    plausible_range: [100.0, 600.0]
+    reference:
+      - { sex: ANY, age: [18, 120], lower: 316.0, upper: 354.0 }
+
+  RDW:
+    name_cn: 红细胞体积分布宽度
+    aliases: [RDW, "RDW-CV", "RDW-SD", 红细胞体积分布宽度, 红细胞分布宽度]
+    canonical_unit: "%"
+    plausible_range: [5.0, 40.0]
+    reference:
+      - { sex: ANY, age: [18, 120], lower: 11.5, upper: 14.5 }
+
   # ------------------------- 电解质 -------------------------
   K:
     name_cn: 血钾

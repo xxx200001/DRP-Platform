@@ -817,30 +817,28 @@ def _ocr_extract_image(image_b64: str) -> str:
                         })
 
                     if items:
-                        # 按照 y_center 排序，基于垂直重叠度精确聚类行
+                        # 按照 y_center 排序，基于行中心点锚定聚类，彻底杜绝行雪球粘连
                         items.sort(key=lambda it: it["y_center"])
                         lines = []
                         for it in items:
-                            placed = False
-                            for line in lines:
-                                line_ymin = min(x["y_min"] for x in line)
-                                line_ymax = max(x["y_max"] for x in line)
-                                line_h = max(line_ymax - line_ymin, 1.0)
-                                overlap = max(0, min(it["y_max"], line_ymax) - max(it["y_min"], line_ymin))
-                                min_h = min(it["h"], line_h)
-                                if min_h > 0 and (overlap / min_h) >= 0.40:
-                                    line.append(it)
-                                    placed = True
+                            matched = None
+                            for l in lines:
+                                if abs(it["y_center"] - l["anchor_y"]) <= max(min(it["h"], l["h"]) * 0.45, 5.0):
+                                    matched = l
                                     break
-                            if not placed:
-                                lines.append([it])
+                            if matched:
+                                matched["items"].append(it)
+                                matched["anchor_y"] = sum(x["y_center"] for x in matched["items"]) / len(matched["items"])
+                                matched["h"] = sum(x["h"] for x in matched["items"]) / len(matched["items"])
+                            else:
+                                lines.append({"anchor_y": it["y_center"], "h": it["h"], "items": [it]})
 
                         # 按行纵向从上到下排序，行内横向从左到右排序
-                        lines.sort(key=lambda l: min(x["y_min"] for x in l))
+                        lines.sort(key=lambda l: l["anchor_y"])
                         text_lines = []
-                        for line in lines:
-                            line.sort(key=lambda x: x["x_min"])
-                            line_text = "  ".join(x["text"] for x in line).strip()
+                        for l in lines:
+                            l["items"].sort(key=lambda x: x["x_min"])
+                            line_text = "  ".join(x["text"] for x in l["items"]).strip()
                             if line_text:
                                 text_lines.append(line_text)
 
