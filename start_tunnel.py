@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-DRP 病情预测平台 · 一键穿透启动脚本
-自动启动本地服务并拉起 Cloudflare Tunnel 公网穿透，输出手机可直接访问的 HTTPS 链接与二维码。
+DRP 病情预测平台 · 一键穿透启动程序
+自动启动本地后端服务并拉起 Cloudflare Tunnel 公网穿透，自动输出手机可直接访问的 HTTPS 链接与二维码。
 """
 
 import os
@@ -29,12 +29,20 @@ def is_port_open(port: int, host: str = "127.0.0.1") -> bool:
 
 
 def find_cloudflared() -> str | None:
+    # 1. 优先使用本地仓库捆绑的 bin/cloudflared.exe
+    local_bin = ROOT_DIR / "bin" / ("cloudflared.exe" if sys.platform == "win32" else "cloudflared")
+    if local_bin.exists():
+        return str(local_bin)
+
+    # 2. 检查系统 PATH
     path = shutil.which("cloudflared")
     if path:
         return path
-    # 常用 Windows 路径兜底
+
+    # 3. 常用 Windows 默认路径
     candidates = [
         Path(os.environ.get("LOCALAPPDATA", "")) / "Microsoft/WinGet/Links/cloudflared.exe",
+        Path(os.environ.get("LOCALAPPDATA", "")) / "Programs/cloudflared/cloudflared.exe",
         Path("C:/Program Files/cloudflared/cloudflared.exe"),
         Path("C:/Program Files (x86)/cloudflared/cloudflared.exe"),
     ]
@@ -44,15 +52,42 @@ def find_cloudflared() -> str | None:
     return None
 
 
+def ensure_cloudflared() -> str | None:
+    cf = find_cloudflared()
+    if cf:
+        return cf
+
+    print("[提示] 未检测到穿透组件，正在自动下载适配二进制...")
+    local_bin = ROOT_DIR / "bin" / ("cloudflared.exe" if sys.platform == "win32" else "cloudflared")
+    local_bin.parent.mkdir(parents=True, exist_ok=True)
+
+    urls = [
+        "https://ghproxy.net/https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe",
+        "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe",
+    ]
+    for url in urls:
+        try:
+            print(f"正在从 {url} 下载...")
+            urllib.request.urlretrieve(url, str(local_bin))
+            if sys.platform != "win32":
+                os.chmod(str(local_bin), 0o755)
+            print("✅ 穿透组件下载完成！")
+            return str(local_bin)
+        except Exception as e:
+            print(f"下载失败 ({e})，尝试备用地址...")
+            continue
+    return None
+
+
 def main():
     print("=" * 64)
-    print("      DRP 病情预测平台 · 内网穿透启动程序")
+    print("      DRP 病情预测平台 · 一键穿透与服务启动")
     print("=" * 64)
 
     procs = []
 
     def cleanup(sig=None, frame=None):
-        print("\n正在停止所有后台服务...")
+        print("\n正在安全退出所有后台进程...")
         for p in procs:
             try:
                 p.terminate()
@@ -62,15 +97,15 @@ def main():
                     p.kill()
                 except Exception:
                     pass
-        print("所有服务已安全退出。")
+        print("所有服务已安全关闭。")
         sys.exit(0)
 
     signal.signal(signal.SIGINT, cleanup)
     signal.signal(signal.SIGTERM, cleanup)
 
-    # 1. 检查或启动本地服务
+    # 1. 检查或自动启动本地后端
     if is_port_open(PORT):
-        print(f"[1/2] 检测到本地服务已在运行: {LOCAL_URL}")
+        print(f"[1/2] 检测到本地预测服务已在运行: {LOCAL_URL}")
     else:
         print(f"[1/2] 正在启动本地 DRP 预测平台服务 (端口 {PORT})...")
         py_exe = sys.executable
@@ -83,7 +118,7 @@ def main():
         )
         procs.append(srv_proc)
 
-        # 等待服务端口就绪
+        # 等待服务端口响应
         for _ in range(60):
             if is_port_open(PORT):
                 break
@@ -91,15 +126,12 @@ def main():
         else:
             print("⚠️ 本地服务启动超时，请检查 run_app.py 是否有错误。")
 
-    # 2. 检查并启动 Cloudflare Tunnel
-    cf_bin = find_cloudflared()
+    # 2. 检查或下载 Cloudflare Tunnel
+    cf_bin = ensure_cloudflared()
     if not cf_bin:
-        print("\n❌ 未找到 cloudflared 可执行文件。")
-        print("请在终端运行以下命令安装：")
-        print("  Windows: winget install --id Cloudflare.cloudflared")
-        print("  或下载: https://github.com/cloudflare/cloudflared/releases/latest")
-        if not is_port_open(PORT):
-            print(f"\n你仍可使用本地地址访问: {LOCAL_URL}")
+        print("\n❌ 无法获取 cloudflared 穿透组件。")
+        print("请在终端运行：winget install --id Cloudflare.cloudflared")
+        print(f"本地服务仍可正常使用: {LOCAL_URL}")
         input("\n按回车键退出...")
         return
 
@@ -118,9 +150,9 @@ def main():
     tunnel_url = None
     url_pattern = re.compile(r"https://[a-zA-Z0-9-]+\.trycloudflare\.com")
 
-    # 读取输出匹配穿透公网地址
+    # 捕获输出中的穿透域名
     start_time = time.time()
-    while time.time() - start_time < 30:
+    while time.time() - start_time < 35:
         line = tunnel_proc.stderr.readline()
         if not line and tunnel_proc.poll() is not None:
             break
@@ -135,13 +167,12 @@ def main():
         print("=" * 64)
         print(f"  📱 手机/公网访问地址:  {tunnel_url}")
         print(f"  💻 电脑本地访问地址:    {LOCAL_URL}")
-        print(f"  📖 API 文档 (Swagger):  {tunnel_url}/docs")
+        print(f"  📖 API 接口文档:        {tunnel_url}/docs")
         print("=" * 64)
-        print("提示：手机连接 4G/5G 或任意 Wi-Fi，用手机浏览器打开上方链接")
-        print("     即可使用【手机相册选图】或【拍照】进行化验单智能识别与风险预测。")
+        print("说明：手机使用任意网络打开上方链接，即可拍照/上传相册化验单并进行预测。")
         print("=" * 64 + "\n")
 
-        # 尝试打印终端二维码
+        # 尝试输出终端二维码
         try:
             import qrcode
             qr = qrcode.QRCode(border=1)
@@ -151,7 +182,7 @@ def main():
         except ImportError:
             pass
 
-        # 自动在浏览器打开
+        # 自动弹出浏览器
         try:
             webbrowser.open(tunnel_url)
         except Exception:
