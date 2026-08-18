@@ -671,41 +671,128 @@ async function loadTrend() {
   sel.onchange = () => drawSeries(t.series[+sel.value]);
   if (t.series.length) drawSeries(t.series[0]);
   $("#trendText").textContent = t.rendered_text;
+  renderAIAdvisor(t);
+}
 
-  // 渲染干预建议与应对方案卡片
-  const ivBox = $("#trendInterventionBox");
-  if (t.interventions && t.interventions.length) {
-    ivBox.innerHTML = t.interventions.map((it) => `
-      <div class="intervention-card ${it.level === '重点关注' ? 'alert-high' : 'alert-normal'}">
-        <div class="iv-header">
-          <div class="iv-title"><span class="iv-icon">${esc(it.icon)}</span> <strong>${esc(it.system)}</strong></div>
-          <span class="tag ${it.level === '重点关注' ? 't3' : 't2'}">${esc(it.level)}</span>
-        </div>
-        ${it.target_indicators && it.target_indicators.length ? `
-          <div class="iv-targets">
-            <span class="iv-lbl">关联指标：</span>
-            ${it.target_indicators.map((tg) => `<span class="iv-badge">${esc(tg)}</span>`).join("")}
-          </div>` : ""}
-        <div class="iv-grid">
-          <div class="iv-sec">
-            <div class="iv-sub">🥗 膳食调理办法</div>
-            <ul>${it.diet_advice.map((d) => `<li>${esc(d)}</li>`).join("")}</ul>
-          </div>
-          <div class="iv-sec">
-            <div class="iv-sub">🏃 运动与作息管理</div>
-            <ul>${it.lifestyle_advice.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>
-          </div>
-        </div>
-        <div class="iv-footer">
-          <div class="iv-cycle"><strong>🩺 复查跟踪周期：</strong>${esc(it.followup_cycle)}</div>
-          ${it.red_flags && it.red_flags.length ? `
-            <div class="iv-red"><strong>🚨 就医预警指征：</strong>${it.red_flags.map(esc).join("；")}</div>` : ""}
+function renderAIAdvisor(t) {
+  const box = $("#trendInterventionBox");
+  const ai = t.ai_analysis;
+  const srcLbl = $("#aiModelSource");
+  if (srcLbl) {
+    if (ai && ai.source === "AI_ONLINE_LLM") {
+      srcLbl.textContent = "AI 在线临床大模型（深度分析完成）";
+    } else {
+      srcLbl.textContent = "AI 临床专家模型（深度分析完成）";
+    }
+  }
+
+  if (!ai && (!t.interventions || !t.interventions.length)) {
+    box.innerHTML = `<div class="empty"><b>暂无干预数据</b>请先为该患者记录化验数据并运行预测</div>`;
+    return;
+  }
+
+  let html = "";
+
+  // 1. 若有 LLM 自由生成的叙述文本，优先展示
+  if (ai && ai.llm_narrative_text) {
+    html += `
+      <div class="ai-chapter-card">
+        <div class="ai-ch-title"><span class="ch-badge">LLM</span> <strong>🤖 大模型综合临床见解</strong></div>
+        <div class="prose ai-prose">${esc(ai.llm_narrative_text)}</div>
+      </div>
+    `;
+  }
+
+  // 2. 第一章：时序恶化机制深度剖析
+  if (ai && ai.pathology_mechanism && ai.pathology_mechanism.length) {
+    html += `
+      <div class="ai-chapter-card">
+        <div class="ai-ch-title"><span class="ch-badge ch-1">01</span> <strong>📊 检验指标时序波动与病理机制剖析</strong></div>
+        <div class="ai-ch-body">
+          ${ai.pathology_mechanism.map((p) => `<p class="ai-para">${esc(p)}</p>`).join("")}
         </div>
       </div>
-    `).join("");
-  } else {
-    ivBox.innerHTML = `<div class="empty"><b>暂无干预建议</b>各项指标均在平稳健康范围</div>`;
+    `;
   }
+
+  // 3. 第二章：个性化精准膳食营养处方
+  if (ai && ai.diet_interventions && ai.diet_interventions.length) {
+    html += `
+      <div class="ai-chapter-card">
+        <div class="ai-ch-title"><span class="ch-badge ch-2">02</span> <strong>🥗 个性化精准膳食与营养干预处方</strong></div>
+        <div class="ai-diet-grid">
+          ${ai.diet_interventions.map((d) => `
+            <div class="ai-block">
+              <div class="ai-block-title">${esc(d.title)}</div>
+              <ul>${d.items.map((it) => `<li>${esc(it)}</li>`).join("")}</ul>
+            </div>
+          `).join("")}
+        </div>
+      </div>
+    `;
+  }
+
+  // 4. 第三章：生活方式、睡眠节律与分级运动管理
+  if (ai && ai.lifestyle_interventions && ai.lifestyle_interventions.length) {
+    html += `
+      <div class="ai-chapter-card">
+        <div class="ai-ch-title"><span class="ch-badge ch-3">03</span> <strong>🏃 生活方式、睡眠节律与分级运动处方</strong></div>
+        <div class="ai-diet-grid">
+          ${ai.lifestyle_interventions.map((l) => `
+            <div class="ai-block">
+              <div class="ai-block-title">${esc(l.title)}</div>
+              <ul>${l.items.map((it) => `<li>${esc(it)}</li>`).join("")}</ul>
+            </div>
+          `).join("")}
+        </div>
+      </div>
+    `;
+  }
+
+  // 5. 第四章：靶向专科随访日程与动态监测路径
+  if (ai && ai.followup_plan) {
+    const fp = ai.followup_plan;
+    html += `
+      <div class="ai-chapter-card">
+        <div class="ai-ch-title"><span class="ch-badge ch-4">04</span> <strong>🩺 靶向专科随访日程与动态监测路径</strong></div>
+        <div class="ai-timeline">
+          <div class="tl-step">
+            <div class="tl-badge">${esc(fp.cycle_short)}</div>
+            <div class="tl-content">
+              <strong>近期监测：</strong>${fp.cycle_short_items.map(esc).join("、")}
+            </div>
+          </div>
+          <div class="tl-step">
+            <div class="tl-badge highlight">${esc(fp.cycle_medium)}</div>
+            <div class="tl-content">
+              <strong>中期复查：</strong>${fp.cycle_medium_items.map(esc).join("、")}
+            </div>
+          </div>
+          <div class="tl-step">
+            <div class="tl-badge">${esc(fp.cycle_long)}</div>
+            <div class="tl-content">
+              <strong>长期评估：</strong>${fp.cycle_long_items.map(esc).join("、")}
+            </div>
+          </div>
+        </div>
+        <div class="tl-dept"><strong>推荐就医科室：</strong>${esc(fp.recommend_dept)}</div>
+      </div>
+    `;
+  }
+
+  // 6. 第五章：危险信号预警与就医红线
+  if (ai && ai.red_flags && ai.red_flags.length) {
+    html += `
+      <div class="ai-chapter-card alert-red-card">
+        <div class="ai-ch-title red"><span class="ch-badge ch-red">05</span> <strong>🚨 危险信号预警与就医红线</strong></div>
+        <ul class="red-flag-list">
+          ${ai.red_flags.map((rf) => `<li>${esc(rf)}</li>`).join("")}
+        </ul>
+      </div>
+    `;
+  }
+
+  box.innerHTML = html;
 }
 
 function drawSeries(s) {
@@ -851,6 +938,18 @@ $("#btnAB").addEventListener("click", async () => {
       encodeURIComponent(g)}${h ? "&horizon=" + encodeURIComponent(h) : ""}`);
     $("#abBox").textContent = r.summary;
   } catch (e) { toast(e.message, true); }
+});
+
+$("#btnRefreshAI").addEventListener("click", async () => {
+  if (!state.pid) return toast("请先选择患者", true);
+  toast("正在调用 AI 临床大模型生成深度解读与干预方案...");
+  try {
+    delete state.trend;
+    await loadTrend();
+    toast("AI 临床干预方案已更新！");
+  } catch (e) {
+    toast(e.message, true);
+  }
 });
 
 /* ---------------- go ---------------- */

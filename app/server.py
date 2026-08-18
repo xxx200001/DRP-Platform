@@ -627,7 +627,7 @@ def build_server(app_data: str | Path):
             "referral": advice.to_dict(),
         }
 
-    # ---------------- 趋势报告（规范 6） ----------------
+    # ---------------- 趋势报告与 AI 大模型深度分析 ----------------
     @app.get("/api/patients/{pid}/trend")
     def patient_trend(pid: str):
         patient = _patient_or_404(pid)
@@ -637,7 +637,33 @@ def build_server(app_data: str | Path):
             st.trend, recs, demographics=_demo_frame(patient),
             audit=st.audit, pseudo_id=pseudo, horizons=tuple(st.horizons),
         )
-        return report.to_dict()
+        data = report.to_dict()
+
+        # 接入 AI 大模型临床深度解读与干预方案
+        p_info = {
+            "name": patient.get("name", patient.get("patient_id", pid)),
+            "sex": patient.get("sex", "未知"),
+            "age": patient.get("age", "—"),
+            "n_records": patient.get("n_records", 0),
+        }
+        factors = []
+        if report.change_attribution:
+            factors = [f.phrase() for f in report.change_attribution.factors]
+
+        try:
+            from drp.serving.llm_advisor import generate_llm_trend_analysis
+            ai_data = generate_llm_trend_analysis(
+                p_info,
+                data.get("comparisons", []),
+                data.get("risk_trajectories", {}),
+                factors=factors,
+            )
+            data["ai_analysis"] = ai_data
+        except Exception as e:
+            logger.warning("[Trend] AI 大模型分析生成异常: %s", e)
+            data["ai_analysis"] = None
+
+        return data
 
     # ---------------- 随访回流（规范 1.3） ----------------
     @app.post("/api/feedback")

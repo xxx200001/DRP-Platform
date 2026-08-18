@@ -274,10 +274,16 @@
 
       <div class="card" id="sec-trend-interventions">
         <header>
-          <h2>改善办法与应对方案</h2>
-          <span class="note">根据指标恶化与异常趋势定制的生活调理与就医跟踪</span>
+          <h2>🤖 AI 大模型临床深度解读与干预方案</h2>
+          <span class="note">整合时序恶化机制剖析、个性化膳食处方、分级运动与专科随访日程</span>
         </header>
-        <div id="trendInterventionBox"></div>
+        <div id="aiAdvisorContainer">
+          <div class="ai-status-bar">
+            <span class="ai-badge-pulse"><i class="pulse-dot"></i> <span id="aiModelSource">AI 临床大模型引擎已就绪</span></span>
+            <button class="btn ghost sm" id="btnRefreshAI">⚡ 重新由 AI 大模型生成</button>
+          </div>
+          <div id="trendInterventionBox" style="margin-top:14px"></div>
+        </div>
       </div>
     </section>
 

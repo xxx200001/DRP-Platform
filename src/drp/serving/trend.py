@@ -516,8 +516,8 @@ def build_trend_report(
 
 
 def render_trend_text(report: TrendReport) -> str:
-    """模板渲染 + 合规断言。只叙述真实变化，噪声项不进正文（见模块顶部说明）。"""
-    lines: list[str] = ["【病情趋势与干预报告】"]
+    """模板渲染 + 合规断言。只叙述真实变化与风险走势，详细干预见下方专用交互卡片。"""
+    lines: list[str] = ["【病情趋势时序报告】"]
 
     real = [c for c in report.comparisons if c.is_real_change]
     if real:
@@ -545,17 +545,6 @@ def render_trend_text(report: TrendReport) -> str:
         lines.append("本次风险变化的主要驱动因素：")
         for f in ca.factors[:5]:
             lines.append(f"  · {f.phrase()}")
-
-    if report.interventions:
-        lines.append("\n【改善建议与应对方案】")
-        for it in report.interventions:
-            lines.append(f"▶ {it.system}（{it.level}）")
-            if it.diet_advice:
-                lines.append(f"  · 膳食调理：{it.diet_advice[0]}")
-            if it.lifestyle_advice:
-                lines.append(f"  · 作息运动：{it.lifestyle_advice[0]}")
-            if it.followup_cycle:
-                lines.append(f"  · 复查建议：{it.followup_cycle}")
 
     text = attach_disclaimer("\n".join(lines))
     assert_compliant(text, source="trend.render_trend_text")
