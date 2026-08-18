@@ -619,9 +619,10 @@ function updateSteps() {
 }
 
 /* ---------------- 趋势 ---------------- */
-async function loadTrend() {
+async function loadTrend(force = false) {
   if (!state.pid) return;
-  const t = state.trend || (await api(`/patients/${encodeURIComponent(state.pid)}/trend`));
+  if (force) state.trend = null;
+  const t = (!force && state.trend) ? state.trend : (await api(`/patients/${encodeURIComponent(state.pid)}/trend`));
   state.trend = t;
 
   // 风险走势：线色中性表示"哪个时程"，点色表示"当时哪一层"——

@@ -43,7 +43,7 @@ def _call_openai_compatible(
     try:
         req = urllib.request.Request(
             url,
-            data=json.dumps(payload).encode("utf-8"),
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
             headers=headers,
             method="POST",
         )
@@ -52,7 +52,7 @@ def _call_openai_compatible(
             content = data["choices"][0]["message"]["content"]
             return content.strip()
     except Exception as e:
-        logger.warning("[LLM] OpenAI-compatible API 调用异常: %s", e)
+        logger.warning("[LLM] OpenAI-compatible API error: %s", str(e))
         return None
 
 
@@ -80,7 +80,7 @@ def _call_anthropic(
     try:
         req = urllib.request.Request(
             url,
-            data=json.dumps(payload).encode("utf-8"),
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
             headers=headers,
             method="POST",
         )
@@ -89,7 +89,7 @@ def _call_anthropic(
             content = data["content"][0]["text"]
             return content.strip()
     except Exception as e:
-        logger.warning("[LLM] Anthropic API 调用异常: %s", e)
+        logger.warning("[LLM] Anthropic API error: %s", str(e))
         return None
 
 
@@ -103,9 +103,9 @@ def _build_expert_knowledge_analysis(
     内置医学知识库生成引擎：当外部大模型未配置或网络不可达时，
     依据检验医学与循证医学指南，动态构建详尽、多章节、结构化的深度临床干预方案。
     """
-    name = patient_info.get("name", "受检者")
-    sex = patient_info.get("sex", "未知")
-    age = patient_info.get("age", "—")
+    name = str(patient_info.get("name") or "受检者")
+    sex = str(patient_info.get("sex") or "未知")
+    age = str(patient_info.get("age") or "—")
 
     # 1. 识别异常与恶化指标
     worsened_list = []
@@ -115,19 +115,19 @@ def _build_expert_knowledge_analysis(
         worsened = c.get("worsened", False)
         is_real = c.get("is_real_change", False)
         direction = c.get("direction", "平稳")
-        name_cn = c.get("name_cn", c.get("code", ""))
+        name_cn = str(c.get("name_cn") or c.get("code") or "")
         prev_v = c.get("prev_value")
         curr_v = c.get("curr_value")
-        unit = c.get("unit", "")
+        unit = str(c.get("unit") or "")
         grade = abs(c.get("curr_grade", 0))
 
         item_str = f"{name_cn}（由 {prev_v:g}{unit} {direction}至 {curr_v:g}{unit}）"
         if worsened:
-            worsened_list.append((c["code"], item_str, c))
+            worsened_list.append((c.get("code", ""), item_str, c))
         elif grade > 0 or is_real:
-            abnormal_list.append((c["code"], item_str, c))
+            abnormal_list.append((c.get("code", ""), item_str, c))
         else:
-            stable_list.append((c["code"], item_str, c))
+            stable_list.append((c.get("code", ""), item_str, c))
 
     # 2. 提炼涉及系统
     codes_all = {c.get("code") for c in comparisons}
@@ -154,7 +154,7 @@ def _build_expert_knowledge_analysis(
             f"本次随访检测显示，{w_names} 出现超出生物学变异（RCV）的实质性上升且异常程度加重。"
         )
     elif abnormal_list:
-        ab_names = "、".join(ab[1] for ab in abnormal_list[:3])
+        ab_names = "、".join(ab[1] for ab in abnormal_list[:4])
         mech_paras.append(f"本次随访检测中，{ab_names} 仍持续处于异常警戒区间。")
     else:
         mech_paras.append("本次随访检测各项主要生化指标与前次相比保持平稳，未见显著恶化波动。")
@@ -179,10 +179,16 @@ def _build_expert_knowledge_analysis(
             "【尿酸与肾小球滤过负荷】：血尿酸水平偏高容易在肾小管微环境形成微晶沉积，同时激活肾素-血管紧张素系统，对肾实质及微循环造成双重张力刺激。"
         )
 
+    # 兜底补充全面医学分析
+    if len(mech_paras) < 2:
+        mech_paras.append(
+            "【多器官协同与代谢稳态评估】：通过多期生化序列的纵向跟踪，机体代谢稳态整体处于可控区间，建议继续维持健康的生活作息与定期随访复查。"
+        )
+
     # 构建章节二：个性化膳食营养处方
     diet_sections = []
     diet_sections.append({
-        "title": "🥗 饮食原则与结构重塑",
+        "title": "饮食原则与结构重塑",
         "items": [
             "采用低升糖指数 (GI) 与低饱和脂肪的地中海饮食结构，每日烹调油严格控制在 20~25 克以内（优先选择特级初榨橄榄油或茶籽油）。",
             "主食结构优化：减少精制白米白面（如馒头、精细面条），以全谷物粗杂粮（燕麦片、三色糙米、藜麦、苦荞）替代 40%~50% 主食。",
@@ -191,7 +197,7 @@ def _build_expert_knowledge_analysis(
     })
     if has_liver or has_lipid:
         diet_sections.append({
-            "title": "🚫 重点禁忌与红线清单",
+            "title": "重点禁忌与红线清单",
             "items": [
                 "严格戒酒（包括白酒、啤酒、红酒及含酒精饮料），酒精代谢产物乙醛具有直接肝细胞毒性。",
                 "严禁食用油炸食品、肥肉、动物内脏（脑、肝、腰子）、鱼子及含人造反式脂肪的起酥点心、奶精奶茶。",
@@ -200,7 +206,7 @@ def _build_expert_knowledge_analysis(
         })
     if has_renal:
         diet_sections.append({
-            "title": "💧 尿酸代谢与水分管理",
+            "title": "尿酸代谢与水分管理",
             "items": [
                 "严格避免高嘌呤食材：浓肉汤、火锅汤底、沙丁鱼、贝类海鲜及酵母粉。",
                 "每日保持充足饮水量（2000~2500 mL），推荐饮用弱碱性天然水或柠檬水，分次均匀摄入以维持尿量及促进尿酸溶解。",
@@ -210,7 +216,7 @@ def _build_expert_knowledge_analysis(
     # 构建章节三：分级运动与生活方式处方
     lifestyle_sections = []
     lifestyle_sections.append({
-        "title": "🏃 分级运动干预方案",
+        "title": "分级运动干预方案",
         "items": [
             "有氧运动处方：每周至少 5 次，每次 30~45 分钟中等强度有氧运动（快走、慢跑、游泳、椭圆机），运动时心率维持在 (220 - 年龄) × 60%~70% 的靶心率区间。",
             "餐后微运动习惯：进餐结束 30 分钟后进行 15~20 分钟轻度站立走动或做轻家务，严禁餐后立即卧床或久坐，可有效削平餐后血糖与甘油三酯峰值。",
@@ -218,7 +224,7 @@ def _build_expert_knowledge_analysis(
         ]
     })
     lifestyle_sections.append({
-        "title": "🌙 生物钟与睡眠节律调控",
+        "title": "生物钟与睡眠节律调控",
         "items": [
             "保证每晚 23:00 前入睡，维持 7~8 小时连续且高质量的深睡眠，避免昼夜节律紊乱诱发皮质醇与游离脂肪酸异常升高。",
             "戒烟并严禁被动吸烟，避免尼古丁刺激交感神经引起血管痉挛与氧化应激。",
