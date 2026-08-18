@@ -805,6 +805,7 @@ def _ocr_extract_image(image_b64: str) -> str:
                         x_max = float(np.max(pts[:, 0]))
                         y_max = float(np.max(pts[:, 1]))
                         y_center = (y_min + y_max) / 2.0
+                        height = max(y_max - y_min, 1.0)
                         items.append({
                             "text": txt,
                             "x_min": x_min,
