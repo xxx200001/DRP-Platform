@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "versions": {
+    "dev_bootstrap_v1": {
+      "version": "dev_bootstrap_v1",
+      "bank_dir": "artifacts\\dev_bootstrap_v1",
+      "created_at": "2026-08-16T04:47:38+00:00",
+      "status": "ACTIVE",
+      "validation_status": "CONDITIONAL",
+      "headline_auc": {
+        "1y": 0.7801146827389921,
+        "3y": 0.7544112285818447,
+        "5y": 0.8144169912366115
+      },
+      "validation_reports": {
+        "1y": "reports\\dev_bootstrap_v1\\1y.json",
+        "3y": "reports\\dev_bootstrap_v1\\3y.json",
+        "5y": "reports\\dev_bootstrap_v1\\5y.json"
+      },
+      "notes": "开发自举模型：训练数据为合成纵向病历（规范1.1 禁止合成/公开数据上线）。仅供开发联调与界面验收；正式上线必须以真实脱敏随访病历经 RetrainJob 重训替换。",
+      "traffic_pct": 100.0
+    }
+  },
+  "active_history": []
+}

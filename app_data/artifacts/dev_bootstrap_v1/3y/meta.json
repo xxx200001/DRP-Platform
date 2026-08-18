@@ -1,0 +1,32 @@
+{
+  "trained_at": "2026-08-16T04:47:08+00:00",
+  "backend": "lightgbm",
+  "n_train": 1605,
+  "pos_rate_train": 0.36884735202492214,
+  "n_features": 479,
+  "best_iteration": 29,
+  "calibrated": true,
+  "feature_hash": "91ccb8d2b9fae081",
+  "config": {
+    "n_estimators": 600,
+    "learning_rate": 0.06,
+    "num_leaves": 31,
+    "max_depth": -1,
+    "min_child_samples": 40,
+    "subsample": 0.8,
+    "subsample_freq": 1,
+    "colsample_bytree": 0.8,
+    "reg_alpha": 0.1,
+    "reg_lambda": 2.0,
+    "early_stopping_rounds": 200,
+    "backend": "auto",
+    "seed": 42,
+    "imbalance": "scale_pos_weight",
+    "focal_alpha": 0.25,
+    "focal_gamma": 2.0,
+    "scale_pos_weight_cap": 100.0,
+    "calibration": "isotonic",
+    "use_monotone_constraints": true,
+    "use_categorical": true
+  }
+}

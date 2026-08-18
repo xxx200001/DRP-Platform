@@ -1,0 +1,4313 @@
+[
+  {
+    "name": "age",
+    "group": "demographic",
+    "dtype": "numeric",
+    "indicator": null,
+    "description": "索引日期时的年龄(岁)",
+    "monotone": 1,
+    "allow_missing": false
+  },
+  {
+    "name": "age_group",
+    "group": "demographic",
+    "dtype": "categorical",
+    "indicator": null,
+    "description": "年龄分箱(临床切点 [0, 18, 30, 40, 45, 50, 55, 60, 65, 70, 75, 80, 200])",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "sex_is_male",
+    "group": "demographic",
+    "dtype": "binary",
+    "indicator": null,
+    "description": "性别 1男/0女/NaN未知",
+    "monotone": 0,
+    "allow_missing": false
+  },
+  {
+    "name": "index_month",
+    "group": "demographic",
+    "dtype": "categorical",
+    "indicator": null,
+    "description": "索引日期月份(捕捉指标季节性波动)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "ALT_value",
+    "group": "raw_value",
+    "dtype": "numeric",
+    "indicator": "ALT",
+    "description": "丙氨酸氨基转移酶 最近一次数值(U/L)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "ALT_status",
+    "group": "status",
+    "dtype": "categorical",
+    "indicator": "ALT",
+    "description": "丙氨酸氨基转移酶 三态: 0未检查/1正常/2异常",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "ALT_z_ref",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "ALT",
+    "description": "丙氨酸氨基转移酶 参考区间标准化偏离(|z|<=1为区间内)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "ALT_pct_dev",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "ALT",
+    "description": "丙氨酸氨基转移酶 超出参考区间边界的百分比(区间内为0)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "ALT_grade",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "ALT",
+    "description": "丙氨酸氨基转移酶 异常分级 -3重度低..0正常..3重度高",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "AST_value",
+    "group": "raw_value",
+    "dtype": "numeric",
+    "indicator": "AST",
+    "description": "天门冬氨酸氨基转移酶 最近一次数值(U/L)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "AST_status",
+    "group": "status",
+    "dtype": "categorical",
+    "indicator": "AST",
+    "description": "天门冬氨酸氨基转移酶 三态: 0未检查/1正常/2异常",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "AST_z_ref",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "AST",
+    "description": "天门冬氨酸氨基转移酶 参考区间标准化偏离(|z|<=1为区间内)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "AST_pct_dev",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "AST",
+    "description": "天门冬氨酸氨基转移酶 超出参考区间边界的百分比(区间内为0)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "AST_grade",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "AST",
+    "description": "天门冬氨酸氨基转移酶 异常分级 -3重度低..0正常..3重度高",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "GGT_value",
+    "group": "raw_value",
+    "dtype": "numeric",
+    "indicator": "GGT",
+    "description": "γ-谷氨酰转移酶 最近一次数值(U/L)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "GGT_status",
+    "group": "status",
+    "dtype": "categorical",
+    "indicator": "GGT",
+    "description": "γ-谷氨酰转移酶 三态: 0未检查/1正常/2异常",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "GGT_z_ref",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "GGT",
+    "description": "γ-谷氨酰转移酶 参考区间标准化偏离(|z|<=1为区间内)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "GGT_pct_dev",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "GGT",
+    "description": "γ-谷氨酰转移酶 超出参考区间边界的百分比(区间内为0)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "GGT_grade",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "GGT",
+    "description": "γ-谷氨酰转移酶 异常分级 -3重度低..0正常..3重度高",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "TBIL_value",
+    "group": "raw_value",
+    "dtype": "numeric",
+    "indicator": "TBIL",
+    "description": "总胆红素 最近一次数值(umol/L)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "TBIL_status",
+    "group": "status",
+    "dtype": "categorical",
+    "indicator": "TBIL",
+    "description": "总胆红素 三态: 0未检查/1正常/2异常",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "TBIL_z_ref",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "TBIL",
+    "description": "总胆红素 参考区间标准化偏离(|z|<=1为区间内)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "TBIL_pct_dev",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "TBIL",
+    "description": "总胆红素 超出参考区间边界的百分比(区间内为0)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "TBIL_grade",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "TBIL",
+    "description": "总胆红素 异常分级 -3重度低..0正常..3重度高",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "ALB_value",
+    "group": "raw_value",
+    "dtype": "numeric",
+    "indicator": "ALB",
+    "description": "白蛋白 最近一次数值(g/L)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "ALB_status",
+    "group": "status",
+    "dtype": "categorical",
+    "indicator": "ALB",
+    "description": "白蛋白 三态: 0未检查/1正常/2异常",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "ALB_z_ref",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "ALB",
+    "description": "白蛋白 参考区间标准化偏离(|z|<=1为区间内)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "ALB_pct_dev",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "ALB",
+    "description": "白蛋白 超出参考区间边界的百分比(区间内为0)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "ALB_grade",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "ALB",
+    "description": "白蛋白 异常分级 -3重度低..0正常..3重度高",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "CREA_value",
+    "group": "raw_value",
+    "dtype": "numeric",
+    "indicator": "CREA",
+    "description": "肌酐 最近一次数值(umol/L)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "CREA_status",
+    "group": "status",
+    "dtype": "categorical",
+    "indicator": "CREA",
+    "description": "肌酐 三态: 0未检查/1正常/2异常",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "CREA_z_ref",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "CREA",
+    "description": "肌酐 参考区间标准化偏离(|z|<=1为区间内)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "CREA_pct_dev",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "CREA",
+    "description": "肌酐 超出参考区间边界的百分比(区间内为0)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "CREA_grade",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "CREA",
+    "description": "肌酐 异常分级 -3重度低..0正常..3重度高",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "UA_value",
+    "group": "raw_value",
+    "dtype": "numeric",
+    "indicator": "UA",
+    "description": "尿酸 最近一次数值(umol/L)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "UA_status",
+    "group": "status",
+    "dtype": "categorical",
+    "indicator": "UA",
+    "description": "尿酸 三态: 0未检查/1正常/2异常",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "UA_z_ref",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "UA",
+    "description": "尿酸 参考区间标准化偏离(|z|<=1为区间内)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "UA_pct_dev",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "UA",
+    "description": "尿酸 超出参考区间边界的百分比(区间内为0)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "UA_grade",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "UA",
+    "description": "尿酸 异常分级 -3重度低..0正常..3重度高",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "GLU_value",
+    "group": "raw_value",
+    "dtype": "numeric",
+    "indicator": "GLU",
+    "description": "空腹血糖 最近一次数值(mmol/L)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "GLU_status",
+    "group": "status",
+    "dtype": "categorical",
+    "indicator": "GLU",
+    "description": "空腹血糖 三态: 0未检查/1正常/2异常",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "GLU_z_ref",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "GLU",
+    "description": "空腹血糖 参考区间标准化偏离(|z|<=1为区间内)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "GLU_pct_dev",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "GLU",
+    "description": "空腹血糖 超出参考区间边界的百分比(区间内为0)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "GLU_grade",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "GLU",
+    "description": "空腹血糖 异常分级 -3重度低..0正常..3重度高",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HBA1C_value",
+    "group": "raw_value",
+    "dtype": "numeric",
+    "indicator": "HBA1C",
+    "description": "糖化血红蛋白 最近一次数值(%)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HBA1C_status",
+    "group": "status",
+    "dtype": "categorical",
+    "indicator": "HBA1C",
+    "description": "糖化血红蛋白 三态: 0未检查/1正常/2异常",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HBA1C_z_ref",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "HBA1C",
+    "description": "糖化血红蛋白 参考区间标准化偏离(|z|<=1为区间内)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HBA1C_pct_dev",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "HBA1C",
+    "description": "糖化血红蛋白 超出参考区间边界的百分比(区间内为0)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HBA1C_grade",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "HBA1C",
+    "description": "糖化血红蛋白 异常分级 -3重度低..0正常..3重度高",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "TG_value",
+    "group": "raw_value",
+    "dtype": "numeric",
+    "indicator": "TG",
+    "description": "甘油三酯 最近一次数值(mmol/L)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "TG_status",
+    "group": "status",
+    "dtype": "categorical",
+    "indicator": "TG",
+    "description": "甘油三酯 三态: 0未检查/1正常/2异常",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "TG_z_ref",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "TG",
+    "description": "甘油三酯 参考区间标准化偏离(|z|<=1为区间内)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "TG_pct_dev",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "TG",
+    "description": "甘油三酯 超出参考区间边界的百分比(区间内为0)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "TG_grade",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "TG",
+    "description": "甘油三酯 异常分级 -3重度低..0正常..3重度高",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HDLC_value",
+    "group": "raw_value",
+    "dtype": "numeric",
+    "indicator": "HDLC",
+    "description": "高密度脂蛋白胆固醇 最近一次数值(mmol/L)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HDLC_status",
+    "group": "status",
+    "dtype": "categorical",
+    "indicator": "HDLC",
+    "description": "高密度脂蛋白胆固醇 三态: 0未检查/1正常/2异常",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HDLC_z_ref",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "HDLC",
+    "description": "高密度脂蛋白胆固醇 参考区间标准化偏离(|z|<=1为区间内)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HDLC_pct_dev",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "HDLC",
+    "description": "高密度脂蛋白胆固醇 超出参考区间边界的百分比(区间内为0)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HDLC_grade",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "HDLC",
+    "description": "高密度脂蛋白胆固醇 异常分级 -3重度低..0正常..3重度高",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "LDLC_value",
+    "group": "raw_value",
+    "dtype": "numeric",
+    "indicator": "LDLC",
+    "description": "低密度脂蛋白胆固醇 最近一次数值(mmol/L)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "LDLC_status",
+    "group": "status",
+    "dtype": "categorical",
+    "indicator": "LDLC",
+    "description": "低密度脂蛋白胆固醇 三态: 0未检查/1正常/2异常",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "LDLC_z_ref",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "LDLC",
+    "description": "低密度脂蛋白胆固醇 参考区间标准化偏离(|z|<=1为区间内)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "LDLC_pct_dev",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "LDLC",
+    "description": "低密度脂蛋白胆固醇 超出参考区间边界的百分比(区间内为0)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "LDLC_grade",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "LDLC",
+    "description": "低密度脂蛋白胆固醇 异常分级 -3重度低..0正常..3重度高",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "PLT_value",
+    "group": "raw_value",
+    "dtype": "numeric",
+    "indicator": "PLT",
+    "description": "血小板计数 最近一次数值(10^9/L)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "PLT_status",
+    "group": "status",
+    "dtype": "categorical",
+    "indicator": "PLT",
+    "description": "血小板计数 三态: 0未检查/1正常/2异常",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "PLT_z_ref",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "PLT",
+    "description": "血小板计数 参考区间标准化偏离(|z|<=1为区间内)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "PLT_pct_dev",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "PLT",
+    "description": "血小板计数 超出参考区间边界的百分比(区间内为0)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "PLT_grade",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "PLT",
+    "description": "血小板计数 异常分级 -3重度低..0正常..3重度高",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HGB_value",
+    "group": "raw_value",
+    "dtype": "numeric",
+    "indicator": "HGB",
+    "description": "血红蛋白 最近一次数值(g/L)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HGB_status",
+    "group": "status",
+    "dtype": "categorical",
+    "indicator": "HGB",
+    "description": "血红蛋白 三态: 0未检查/1正常/2异常",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HGB_z_ref",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "HGB",
+    "description": "血红蛋白 参考区间标准化偏离(|z|<=1为区间内)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HGB_pct_dev",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "HGB",
+    "description": "血红蛋白 超出参考区间边界的百分比(区间内为0)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HGB_grade",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "HGB",
+    "description": "血红蛋白 异常分级 -3重度低..0正常..3重度高",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "CRP_value",
+    "group": "raw_value",
+    "dtype": "numeric",
+    "indicator": "CRP",
+    "description": "C反应蛋白 最近一次数值(mg/L)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "CRP_status",
+    "group": "status",
+    "dtype": "categorical",
+    "indicator": "CRP",
+    "description": "C反应蛋白 三态: 0未检查/1正常/2异常",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "CRP_z_ref",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "CRP",
+    "description": "C反应蛋白 参考区间标准化偏离(|z|<=1为区间内)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "CRP_pct_dev",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "CRP",
+    "description": "C反应蛋白 超出参考区间边界的百分比(区间内为0)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "CRP_grade",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "CRP",
+    "description": "C反应蛋白 异常分级 -3重度低..0正常..3重度高",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "SBP_value",
+    "group": "raw_value",
+    "dtype": "numeric",
+    "indicator": "SBP",
+    "description": "收缩压 最近一次数值(mmHg)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "SBP_status",
+    "group": "status",
+    "dtype": "categorical",
+    "indicator": "SBP",
+    "description": "收缩压 三态: 0未检查/1正常/2异常",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "SBP_z_ref",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "SBP",
+    "description": "收缩压 参考区间标准化偏离(|z|<=1为区间内)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "SBP_pct_dev",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "SBP",
+    "description": "收缩压 超出参考区间边界的百分比(区间内为0)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "SBP_grade",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "SBP",
+    "description": "收缩压 异常分级 -3重度低..0正常..3重度高",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "DBP_value",
+    "group": "raw_value",
+    "dtype": "numeric",
+    "indicator": "DBP",
+    "description": "舒张压 最近一次数值(mmHg)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "DBP_status",
+    "group": "status",
+    "dtype": "categorical",
+    "indicator": "DBP",
+    "description": "舒张压 三态: 0未检查/1正常/2异常",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "DBP_z_ref",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "DBP",
+    "description": "舒张压 参考区间标准化偏离(|z|<=1为区间内)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "DBP_pct_dev",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "DBP",
+    "description": "舒张压 超出参考区间边界的百分比(区间内为0)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "DBP_grade",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "DBP",
+    "description": "舒张压 异常分级 -3重度低..0正常..3重度高",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "BMI_value",
+    "group": "raw_value",
+    "dtype": "numeric",
+    "indicator": "BMI",
+    "description": "体质指数 最近一次数值(kg/m^2)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "BMI_status",
+    "group": "status",
+    "dtype": "categorical",
+    "indicator": "BMI",
+    "description": "体质指数 三态: 0未检查/1正常/2异常",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "BMI_z_ref",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "BMI",
+    "description": "体质指数 参考区间标准化偏离(|z|<=1为区间内)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "BMI_pct_dev",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "BMI",
+    "description": "体质指数 超出参考区间边界的百分比(区间内为0)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "BMI_grade",
+    "group": "deviation",
+    "dtype": "numeric",
+    "indicator": "BMI",
+    "description": "体质指数 异常分级 -3重度低..0正常..3重度高",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "ratio_AST_ALT",
+    "group": "clinical_ratio",
+    "dtype": "numeric",
+    "indicator": "AST+ALT",
+    "description": "De Ritis 比值(AST/ALT)。>2 提示酒精性肝病/肝硬化，<1 多见于病毒性肝炎 [依据: De Ritis F. Clin Chim Acta 1957;2:70-4]",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "score_FIB4",
+    "group": "clinical_ratio",
+    "dtype": "numeric",
+    "indicator": "AST+ALT+PLT",
+    "description": "FIB-4 肝纤维化指数。<1.45 排除进展性纤维化，>3.25 高度提示 [依据: Sterling RK, Hepatology 2006;43:1317-25]",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "score_APRI",
+    "group": "clinical_ratio",
+    "dtype": "numeric",
+    "indicator": "AST+PLT",
+    "description": "APRI 天冬氨酸转氨酶血小板比值指数(ULN_AST=40.0) [依据: Wai CT, Hepatology 2003;38:518-26]",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "ratio_TBIL_ALB",
+    "group": "clinical_ratio",
+    "dtype": "numeric",
+    "indicator": "TBIL+ALB",
+    "description": "胆红素/白蛋白比值。反映肝脏合成与排泄功能的综合失代偿程度 [依据: Wu SJ, et al. Medicine 2019;98:e14834]",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "ratio_PLT_TBIL",
+    "group": "clinical_ratio",
+    "dtype": "numeric",
+    "indicator": "PLT+TBIL",
+    "description": "血小板/胆红素比值。门脉高压与肝功能储备的联合指标 [依据: 临床常用肝硬化评估比值]",
+    "monotone": -1,
+    "allow_missing": true
+  },
+  {
+    "name": "score_eGFR",
+    "group": "clinical_ratio",
+    "dtype": "numeric",
+    "indicator": "CREA",
+    "description": "eGFR 估算肾小球滤过率(CKD-EPI 2021 去种族版) [依据: Inker LA, NEJM 2021;385:1737-49]",
+    "monotone": -1,
+    "allow_missing": true
+  },
+  {
+    "name": "ratio_UA_CREA",
+    "group": "clinical_ratio",
+    "dtype": "numeric",
+    "indicator": "UA+CREA",
+    "description": "尿酸/肌酐比值。用于区分尿酸生成过多与排泄减少 [依据: 临床常用比值]",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "ratio_LDLC_HDLC",
+    "group": "clinical_ratio",
+    "dtype": "numeric",
+    "indicator": "LDLC+HDLC",
+    "description": "Castelli 指数 II (LDL-C/HDL-C) [依据: Castelli WP, Am J Med 1977;62:707-14]",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "ratio_TG_HDLC",
+    "group": "clinical_ratio",
+    "dtype": "numeric",
+    "indicator": "TG+HDLC",
+    "description": "TG/HDL-C 比值。胰岛素抵抗与小而密 LDL 的替代标志 [依据: Gaziano JM, Circulation 1997;96:2520-5]",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "score_TyG",
+    "group": "clinical_ratio",
+    "dtype": "numeric",
+    "indicator": "TG+GLU",
+    "description": "TyG 甘油三酯-葡萄糖指数。胰岛素抵抗简易替代指标 [依据: Simental-Mendía LE, Metab Syndr Relat Disord 2008;6:299-304]",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "calc_MAP",
+    "group": "clinical_ratio",
+    "dtype": "numeric",
+    "indicator": "SBP+DBP",
+    "description": "平均动脉压 MAP。器官灌注压的核心指标 [依据: 生理学标准公式]",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "calc_PP",
+    "group": "clinical_ratio",
+    "dtype": "numeric",
+    "indicator": "SBP+DBP",
+    "description": "脉压差 = SBP - DBP。增大提示动脉硬化程度加重 [依据: Franklin SS, Circulation 1999;100:354-60]",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "ALT_n_obs",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "ALT",
+    "description": "丙氨酸氨基转移酶 窗口内观测次数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "ALT_last",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "ALT",
+    "description": "丙氨酸氨基转移酶 最近一次值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "ALT_prev",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "ALT",
+    "description": "丙氨酸氨基转移酶 上一次值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "ALT_delta",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "ALT",
+    "description": "丙氨酸氨基转移酶 最近两次绝对变化",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "ALT_delta_rate",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "ALT",
+    "description": "丙氨酸氨基转移酶 最近两次变化速率(每月)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "ALT_slope",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "ALT",
+    "description": "丙氨酸氨基转移酶 窗口 OLS 斜率(每月)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "ALT_slope_r2",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "ALT",
+    "description": "丙氨酸氨基转移酶 斜率拟合优度 R²(区分稳定趋势与震荡)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "ALT_mean",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "ALT",
+    "description": "丙氨酸氨基转移酶 窗口均值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "ALT_std",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "ALT",
+    "description": "丙氨酸氨基转移酶 窗口标准差",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "ALT_cv",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "ALT",
+    "description": "丙氨酸氨基转移酶 窗口变异系数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "ALT_min",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "ALT",
+    "description": "丙氨酸氨基转移酶 窗口最小值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "ALT_max",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "ALT",
+    "description": "丙氨酸氨基转移酶 窗口最大值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "ALT_range",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "ALT",
+    "description": "丙氨酸氨基转移酶 窗口极差",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "ALT_span_days",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "ALT",
+    "description": "丙氨酸氨基转移酶 窗口首末观测间隔天数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "ALT_n_abnormal",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "ALT",
+    "description": "丙氨酸氨基转移酶 窗口内异常次数",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "ALT_abnormal_ratio",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "ALT",
+    "description": "丙氨酸氨基转移酶 窗口内异常比例",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "ALT_max_grade",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "ALT",
+    "description": "丙氨酸氨基转移酶 窗口内最严重异常分级",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "ALT_trend",
+    "group": "temporal",
+    "dtype": "categorical",
+    "indicator": "ALT",
+    "description": "丙氨酸氨基转移酶 趋势标签 0未知/1平稳/2上升/3下降(基于RCV)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "ALT_persistence",
+    "group": "temporal",
+    "dtype": "categorical",
+    "indicator": "ALT",
+    "description": "丙氨酸氨基转移酶 0未知/1从未异常/2一过性/3反复/4持续",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "ALT_crossed_up",
+    "group": "temporal",
+    "dtype": "binary",
+    "indicator": "ALT",
+    "description": "丙氨酸氨基转移酶 窗口内是否发生正常→异常跨界",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "AST_n_obs",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "AST",
+    "description": "天门冬氨酸氨基转移酶 窗口内观测次数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "AST_last",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "AST",
+    "description": "天门冬氨酸氨基转移酶 最近一次值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "AST_prev",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "AST",
+    "description": "天门冬氨酸氨基转移酶 上一次值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "AST_delta",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "AST",
+    "description": "天门冬氨酸氨基转移酶 最近两次绝对变化",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "AST_delta_rate",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "AST",
+    "description": "天门冬氨酸氨基转移酶 最近两次变化速率(每月)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "AST_slope",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "AST",
+    "description": "天门冬氨酸氨基转移酶 窗口 OLS 斜率(每月)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "AST_slope_r2",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "AST",
+    "description": "天门冬氨酸氨基转移酶 斜率拟合优度 R²(区分稳定趋势与震荡)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "AST_mean",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "AST",
+    "description": "天门冬氨酸氨基转移酶 窗口均值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "AST_std",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "AST",
+    "description": "天门冬氨酸氨基转移酶 窗口标准差",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "AST_cv",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "AST",
+    "description": "天门冬氨酸氨基转移酶 窗口变异系数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "AST_min",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "AST",
+    "description": "天门冬氨酸氨基转移酶 窗口最小值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "AST_max",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "AST",
+    "description": "天门冬氨酸氨基转移酶 窗口最大值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "AST_range",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "AST",
+    "description": "天门冬氨酸氨基转移酶 窗口极差",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "AST_span_days",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "AST",
+    "description": "天门冬氨酸氨基转移酶 窗口首末观测间隔天数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "AST_n_abnormal",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "AST",
+    "description": "天门冬氨酸氨基转移酶 窗口内异常次数",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "AST_abnormal_ratio",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "AST",
+    "description": "天门冬氨酸氨基转移酶 窗口内异常比例",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "AST_max_grade",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "AST",
+    "description": "天门冬氨酸氨基转移酶 窗口内最严重异常分级",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "AST_trend",
+    "group": "temporal",
+    "dtype": "categorical",
+    "indicator": "AST",
+    "description": "天门冬氨酸氨基转移酶 趋势标签 0未知/1平稳/2上升/3下降(基于RCV)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "AST_persistence",
+    "group": "temporal",
+    "dtype": "categorical",
+    "indicator": "AST",
+    "description": "天门冬氨酸氨基转移酶 0未知/1从未异常/2一过性/3反复/4持续",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "AST_crossed_up",
+    "group": "temporal",
+    "dtype": "binary",
+    "indicator": "AST",
+    "description": "天门冬氨酸氨基转移酶 窗口内是否发生正常→异常跨界",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "GGT_n_obs",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "GGT",
+    "description": "γ-谷氨酰转移酶 窗口内观测次数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "GGT_last",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "GGT",
+    "description": "γ-谷氨酰转移酶 最近一次值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "GGT_prev",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "GGT",
+    "description": "γ-谷氨酰转移酶 上一次值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "GGT_delta",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "GGT",
+    "description": "γ-谷氨酰转移酶 最近两次绝对变化",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "GGT_delta_rate",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "GGT",
+    "description": "γ-谷氨酰转移酶 最近两次变化速率(每月)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "GGT_slope",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "GGT",
+    "description": "γ-谷氨酰转移酶 窗口 OLS 斜率(每月)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "GGT_slope_r2",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "GGT",
+    "description": "γ-谷氨酰转移酶 斜率拟合优度 R²(区分稳定趋势与震荡)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "GGT_mean",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "GGT",
+    "description": "γ-谷氨酰转移酶 窗口均值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "GGT_std",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "GGT",
+    "description": "γ-谷氨酰转移酶 窗口标准差",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "GGT_cv",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "GGT",
+    "description": "γ-谷氨酰转移酶 窗口变异系数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "GGT_min",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "GGT",
+    "description": "γ-谷氨酰转移酶 窗口最小值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "GGT_max",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "GGT",
+    "description": "γ-谷氨酰转移酶 窗口最大值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "GGT_range",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "GGT",
+    "description": "γ-谷氨酰转移酶 窗口极差",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "GGT_span_days",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "GGT",
+    "description": "γ-谷氨酰转移酶 窗口首末观测间隔天数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "GGT_n_abnormal",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "GGT",
+    "description": "γ-谷氨酰转移酶 窗口内异常次数",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "GGT_abnormal_ratio",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "GGT",
+    "description": "γ-谷氨酰转移酶 窗口内异常比例",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "GGT_max_grade",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "GGT",
+    "description": "γ-谷氨酰转移酶 窗口内最严重异常分级",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "GGT_trend",
+    "group": "temporal",
+    "dtype": "categorical",
+    "indicator": "GGT",
+    "description": "γ-谷氨酰转移酶 趋势标签 0未知/1平稳/2上升/3下降(基于RCV)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "GGT_persistence",
+    "group": "temporal",
+    "dtype": "categorical",
+    "indicator": "GGT",
+    "description": "γ-谷氨酰转移酶 0未知/1从未异常/2一过性/3反复/4持续",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "GGT_crossed_up",
+    "group": "temporal",
+    "dtype": "binary",
+    "indicator": "GGT",
+    "description": "γ-谷氨酰转移酶 窗口内是否发生正常→异常跨界",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "TBIL_n_obs",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "TBIL",
+    "description": "总胆红素 窗口内观测次数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "TBIL_last",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "TBIL",
+    "description": "总胆红素 最近一次值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "TBIL_prev",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "TBIL",
+    "description": "总胆红素 上一次值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "TBIL_delta",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "TBIL",
+    "description": "总胆红素 最近两次绝对变化",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "TBIL_delta_rate",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "TBIL",
+    "description": "总胆红素 最近两次变化速率(每月)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "TBIL_slope",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "TBIL",
+    "description": "总胆红素 窗口 OLS 斜率(每月)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "TBIL_slope_r2",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "TBIL",
+    "description": "总胆红素 斜率拟合优度 R²(区分稳定趋势与震荡)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "TBIL_mean",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "TBIL",
+    "description": "总胆红素 窗口均值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "TBIL_std",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "TBIL",
+    "description": "总胆红素 窗口标准差",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "TBIL_cv",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "TBIL",
+    "description": "总胆红素 窗口变异系数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "TBIL_min",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "TBIL",
+    "description": "总胆红素 窗口最小值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "TBIL_max",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "TBIL",
+    "description": "总胆红素 窗口最大值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "TBIL_range",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "TBIL",
+    "description": "总胆红素 窗口极差",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "TBIL_span_days",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "TBIL",
+    "description": "总胆红素 窗口首末观测间隔天数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "TBIL_n_abnormal",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "TBIL",
+    "description": "总胆红素 窗口内异常次数",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "TBIL_abnormal_ratio",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "TBIL",
+    "description": "总胆红素 窗口内异常比例",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "TBIL_max_grade",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "TBIL",
+    "description": "总胆红素 窗口内最严重异常分级",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "TBIL_trend",
+    "group": "temporal",
+    "dtype": "categorical",
+    "indicator": "TBIL",
+    "description": "总胆红素 趋势标签 0未知/1平稳/2上升/3下降(基于RCV)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "TBIL_persistence",
+    "group": "temporal",
+    "dtype": "categorical",
+    "indicator": "TBIL",
+    "description": "总胆红素 0未知/1从未异常/2一过性/3反复/4持续",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "TBIL_crossed_up",
+    "group": "temporal",
+    "dtype": "binary",
+    "indicator": "TBIL",
+    "description": "总胆红素 窗口内是否发生正常→异常跨界",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "ALB_n_obs",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "ALB",
+    "description": "白蛋白 窗口内观测次数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "ALB_last",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "ALB",
+    "description": "白蛋白 最近一次值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "ALB_prev",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "ALB",
+    "description": "白蛋白 上一次值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "ALB_delta",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "ALB",
+    "description": "白蛋白 最近两次绝对变化",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "ALB_delta_rate",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "ALB",
+    "description": "白蛋白 最近两次变化速率(每月)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "ALB_slope",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "ALB",
+    "description": "白蛋白 窗口 OLS 斜率(每月)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "ALB_slope_r2",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "ALB",
+    "description": "白蛋白 斜率拟合优度 R²(区分稳定趋势与震荡)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "ALB_mean",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "ALB",
+    "description": "白蛋白 窗口均值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "ALB_std",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "ALB",
+    "description": "白蛋白 窗口标准差",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "ALB_cv",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "ALB",
+    "description": "白蛋白 窗口变异系数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "ALB_min",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "ALB",
+    "description": "白蛋白 窗口最小值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "ALB_max",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "ALB",
+    "description": "白蛋白 窗口最大值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "ALB_range",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "ALB",
+    "description": "白蛋白 窗口极差",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "ALB_span_days",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "ALB",
+    "description": "白蛋白 窗口首末观测间隔天数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "ALB_n_abnormal",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "ALB",
+    "description": "白蛋白 窗口内异常次数",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "ALB_abnormal_ratio",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "ALB",
+    "description": "白蛋白 窗口内异常比例",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "ALB_max_grade",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "ALB",
+    "description": "白蛋白 窗口内最严重异常分级",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "ALB_trend",
+    "group": "temporal",
+    "dtype": "categorical",
+    "indicator": "ALB",
+    "description": "白蛋白 趋势标签 0未知/1平稳/2上升/3下降(基于RCV)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "ALB_persistence",
+    "group": "temporal",
+    "dtype": "categorical",
+    "indicator": "ALB",
+    "description": "白蛋白 0未知/1从未异常/2一过性/3反复/4持续",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "ALB_crossed_up",
+    "group": "temporal",
+    "dtype": "binary",
+    "indicator": "ALB",
+    "description": "白蛋白 窗口内是否发生正常→异常跨界",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "CREA_n_obs",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "CREA",
+    "description": "肌酐 窗口内观测次数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "CREA_last",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "CREA",
+    "description": "肌酐 最近一次值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "CREA_prev",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "CREA",
+    "description": "肌酐 上一次值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "CREA_delta",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "CREA",
+    "description": "肌酐 最近两次绝对变化",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "CREA_delta_rate",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "CREA",
+    "description": "肌酐 最近两次变化速率(每月)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "CREA_slope",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "CREA",
+    "description": "肌酐 窗口 OLS 斜率(每月)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "CREA_slope_r2",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "CREA",
+    "description": "肌酐 斜率拟合优度 R²(区分稳定趋势与震荡)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "CREA_mean",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "CREA",
+    "description": "肌酐 窗口均值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "CREA_std",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "CREA",
+    "description": "肌酐 窗口标准差",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "CREA_cv",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "CREA",
+    "description": "肌酐 窗口变异系数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "CREA_min",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "CREA",
+    "description": "肌酐 窗口最小值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "CREA_max",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "CREA",
+    "description": "肌酐 窗口最大值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "CREA_range",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "CREA",
+    "description": "肌酐 窗口极差",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "CREA_span_days",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "CREA",
+    "description": "肌酐 窗口首末观测间隔天数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "CREA_n_abnormal",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "CREA",
+    "description": "肌酐 窗口内异常次数",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "CREA_abnormal_ratio",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "CREA",
+    "description": "肌酐 窗口内异常比例",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "CREA_max_grade",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "CREA",
+    "description": "肌酐 窗口内最严重异常分级",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "CREA_trend",
+    "group": "temporal",
+    "dtype": "categorical",
+    "indicator": "CREA",
+    "description": "肌酐 趋势标签 0未知/1平稳/2上升/3下降(基于RCV)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "CREA_persistence",
+    "group": "temporal",
+    "dtype": "categorical",
+    "indicator": "CREA",
+    "description": "肌酐 0未知/1从未异常/2一过性/3反复/4持续",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "CREA_crossed_up",
+    "group": "temporal",
+    "dtype": "binary",
+    "indicator": "CREA",
+    "description": "肌酐 窗口内是否发生正常→异常跨界",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "UA_n_obs",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "UA",
+    "description": "尿酸 窗口内观测次数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "UA_last",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "UA",
+    "description": "尿酸 最近一次值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "UA_prev",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "UA",
+    "description": "尿酸 上一次值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "UA_delta",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "UA",
+    "description": "尿酸 最近两次绝对变化",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "UA_delta_rate",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "UA",
+    "description": "尿酸 最近两次变化速率(每月)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "UA_slope",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "UA",
+    "description": "尿酸 窗口 OLS 斜率(每月)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "UA_slope_r2",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "UA",
+    "description": "尿酸 斜率拟合优度 R²(区分稳定趋势与震荡)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "UA_mean",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "UA",
+    "description": "尿酸 窗口均值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "UA_std",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "UA",
+    "description": "尿酸 窗口标准差",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "UA_cv",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "UA",
+    "description": "尿酸 窗口变异系数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "UA_min",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "UA",
+    "description": "尿酸 窗口最小值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "UA_max",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "UA",
+    "description": "尿酸 窗口最大值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "UA_range",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "UA",
+    "description": "尿酸 窗口极差",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "UA_span_days",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "UA",
+    "description": "尿酸 窗口首末观测间隔天数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "UA_n_abnormal",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "UA",
+    "description": "尿酸 窗口内异常次数",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "UA_abnormal_ratio",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "UA",
+    "description": "尿酸 窗口内异常比例",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "UA_max_grade",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "UA",
+    "description": "尿酸 窗口内最严重异常分级",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "UA_trend",
+    "group": "temporal",
+    "dtype": "categorical",
+    "indicator": "UA",
+    "description": "尿酸 趋势标签 0未知/1平稳/2上升/3下降(基于RCV)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "UA_persistence",
+    "group": "temporal",
+    "dtype": "categorical",
+    "indicator": "UA",
+    "description": "尿酸 0未知/1从未异常/2一过性/3反复/4持续",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "UA_crossed_up",
+    "group": "temporal",
+    "dtype": "binary",
+    "indicator": "UA",
+    "description": "尿酸 窗口内是否发生正常→异常跨界",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "GLU_n_obs",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "GLU",
+    "description": "空腹血糖 窗口内观测次数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "GLU_last",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "GLU",
+    "description": "空腹血糖 最近一次值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "GLU_prev",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "GLU",
+    "description": "空腹血糖 上一次值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "GLU_delta",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "GLU",
+    "description": "空腹血糖 最近两次绝对变化",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "GLU_delta_rate",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "GLU",
+    "description": "空腹血糖 最近两次变化速率(每月)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "GLU_slope",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "GLU",
+    "description": "空腹血糖 窗口 OLS 斜率(每月)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "GLU_slope_r2",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "GLU",
+    "description": "空腹血糖 斜率拟合优度 R²(区分稳定趋势与震荡)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "GLU_mean",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "GLU",
+    "description": "空腹血糖 窗口均值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "GLU_std",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "GLU",
+    "description": "空腹血糖 窗口标准差",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "GLU_cv",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "GLU",
+    "description": "空腹血糖 窗口变异系数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "GLU_min",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "GLU",
+    "description": "空腹血糖 窗口最小值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "GLU_max",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "GLU",
+    "description": "空腹血糖 窗口最大值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "GLU_range",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "GLU",
+    "description": "空腹血糖 窗口极差",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "GLU_span_days",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "GLU",
+    "description": "空腹血糖 窗口首末观测间隔天数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "GLU_n_abnormal",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "GLU",
+    "description": "空腹血糖 窗口内异常次数",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "GLU_abnormal_ratio",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "GLU",
+    "description": "空腹血糖 窗口内异常比例",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "GLU_max_grade",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "GLU",
+    "description": "空腹血糖 窗口内最严重异常分级",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "GLU_trend",
+    "group": "temporal",
+    "dtype": "categorical",
+    "indicator": "GLU",
+    "description": "空腹血糖 趋势标签 0未知/1平稳/2上升/3下降(基于RCV)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "GLU_persistence",
+    "group": "temporal",
+    "dtype": "categorical",
+    "indicator": "GLU",
+    "description": "空腹血糖 0未知/1从未异常/2一过性/3反复/4持续",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "GLU_crossed_up",
+    "group": "temporal",
+    "dtype": "binary",
+    "indicator": "GLU",
+    "description": "空腹血糖 窗口内是否发生正常→异常跨界",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "HBA1C_n_obs",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HBA1C",
+    "description": "糖化血红蛋白 窗口内观测次数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HBA1C_last",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HBA1C",
+    "description": "糖化血红蛋白 最近一次值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HBA1C_prev",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HBA1C",
+    "description": "糖化血红蛋白 上一次值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HBA1C_delta",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HBA1C",
+    "description": "糖化血红蛋白 最近两次绝对变化",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HBA1C_delta_rate",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HBA1C",
+    "description": "糖化血红蛋白 最近两次变化速率(每月)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HBA1C_slope",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HBA1C",
+    "description": "糖化血红蛋白 窗口 OLS 斜率(每月)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HBA1C_slope_r2",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HBA1C",
+    "description": "糖化血红蛋白 斜率拟合优度 R²(区分稳定趋势与震荡)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HBA1C_mean",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HBA1C",
+    "description": "糖化血红蛋白 窗口均值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HBA1C_std",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HBA1C",
+    "description": "糖化血红蛋白 窗口标准差",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HBA1C_cv",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HBA1C",
+    "description": "糖化血红蛋白 窗口变异系数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HBA1C_min",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HBA1C",
+    "description": "糖化血红蛋白 窗口最小值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HBA1C_max",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HBA1C",
+    "description": "糖化血红蛋白 窗口最大值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HBA1C_range",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HBA1C",
+    "description": "糖化血红蛋白 窗口极差",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HBA1C_span_days",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HBA1C",
+    "description": "糖化血红蛋白 窗口首末观测间隔天数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HBA1C_n_abnormal",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HBA1C",
+    "description": "糖化血红蛋白 窗口内异常次数",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "HBA1C_abnormal_ratio",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HBA1C",
+    "description": "糖化血红蛋白 窗口内异常比例",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "HBA1C_max_grade",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HBA1C",
+    "description": "糖化血红蛋白 窗口内最严重异常分级",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HBA1C_trend",
+    "group": "temporal",
+    "dtype": "categorical",
+    "indicator": "HBA1C",
+    "description": "糖化血红蛋白 趋势标签 0未知/1平稳/2上升/3下降(基于RCV)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HBA1C_persistence",
+    "group": "temporal",
+    "dtype": "categorical",
+    "indicator": "HBA1C",
+    "description": "糖化血红蛋白 0未知/1从未异常/2一过性/3反复/4持续",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HBA1C_crossed_up",
+    "group": "temporal",
+    "dtype": "binary",
+    "indicator": "HBA1C",
+    "description": "糖化血红蛋白 窗口内是否发生正常→异常跨界",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "TG_n_obs",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "TG",
+    "description": "甘油三酯 窗口内观测次数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "TG_last",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "TG",
+    "description": "甘油三酯 最近一次值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "TG_prev",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "TG",
+    "description": "甘油三酯 上一次值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "TG_delta",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "TG",
+    "description": "甘油三酯 最近两次绝对变化",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "TG_delta_rate",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "TG",
+    "description": "甘油三酯 最近两次变化速率(每月)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "TG_slope",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "TG",
+    "description": "甘油三酯 窗口 OLS 斜率(每月)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "TG_slope_r2",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "TG",
+    "description": "甘油三酯 斜率拟合优度 R²(区分稳定趋势与震荡)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "TG_mean",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "TG",
+    "description": "甘油三酯 窗口均值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "TG_std",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "TG",
+    "description": "甘油三酯 窗口标准差",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "TG_cv",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "TG",
+    "description": "甘油三酯 窗口变异系数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "TG_min",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "TG",
+    "description": "甘油三酯 窗口最小值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "TG_max",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "TG",
+    "description": "甘油三酯 窗口最大值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "TG_range",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "TG",
+    "description": "甘油三酯 窗口极差",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "TG_span_days",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "TG",
+    "description": "甘油三酯 窗口首末观测间隔天数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "TG_n_abnormal",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "TG",
+    "description": "甘油三酯 窗口内异常次数",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "TG_abnormal_ratio",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "TG",
+    "description": "甘油三酯 窗口内异常比例",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "TG_max_grade",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "TG",
+    "description": "甘油三酯 窗口内最严重异常分级",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "TG_trend",
+    "group": "temporal",
+    "dtype": "categorical",
+    "indicator": "TG",
+    "description": "甘油三酯 趋势标签 0未知/1平稳/2上升/3下降(基于RCV)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "TG_persistence",
+    "group": "temporal",
+    "dtype": "categorical",
+    "indicator": "TG",
+    "description": "甘油三酯 0未知/1从未异常/2一过性/3反复/4持续",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "TG_crossed_up",
+    "group": "temporal",
+    "dtype": "binary",
+    "indicator": "TG",
+    "description": "甘油三酯 窗口内是否发生正常→异常跨界",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "HDLC_n_obs",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HDLC",
+    "description": "高密度脂蛋白胆固醇 窗口内观测次数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HDLC_last",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HDLC",
+    "description": "高密度脂蛋白胆固醇 最近一次值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HDLC_prev",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HDLC",
+    "description": "高密度脂蛋白胆固醇 上一次值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HDLC_delta",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HDLC",
+    "description": "高密度脂蛋白胆固醇 最近两次绝对变化",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HDLC_delta_rate",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HDLC",
+    "description": "高密度脂蛋白胆固醇 最近两次变化速率(每月)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HDLC_slope",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HDLC",
+    "description": "高密度脂蛋白胆固醇 窗口 OLS 斜率(每月)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HDLC_slope_r2",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HDLC",
+    "description": "高密度脂蛋白胆固醇 斜率拟合优度 R²(区分稳定趋势与震荡)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HDLC_mean",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HDLC",
+    "description": "高密度脂蛋白胆固醇 窗口均值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HDLC_std",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HDLC",
+    "description": "高密度脂蛋白胆固醇 窗口标准差",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HDLC_cv",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HDLC",
+    "description": "高密度脂蛋白胆固醇 窗口变异系数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HDLC_min",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HDLC",
+    "description": "高密度脂蛋白胆固醇 窗口最小值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HDLC_max",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HDLC",
+    "description": "高密度脂蛋白胆固醇 窗口最大值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HDLC_range",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HDLC",
+    "description": "高密度脂蛋白胆固醇 窗口极差",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HDLC_span_days",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HDLC",
+    "description": "高密度脂蛋白胆固醇 窗口首末观测间隔天数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HDLC_n_abnormal",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HDLC",
+    "description": "高密度脂蛋白胆固醇 窗口内异常次数",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "HDLC_abnormal_ratio",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HDLC",
+    "description": "高密度脂蛋白胆固醇 窗口内异常比例",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "HDLC_max_grade",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HDLC",
+    "description": "高密度脂蛋白胆固醇 窗口内最严重异常分级",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HDLC_trend",
+    "group": "temporal",
+    "dtype": "categorical",
+    "indicator": "HDLC",
+    "description": "高密度脂蛋白胆固醇 趋势标签 0未知/1平稳/2上升/3下降(基于RCV)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HDLC_persistence",
+    "group": "temporal",
+    "dtype": "categorical",
+    "indicator": "HDLC",
+    "description": "高密度脂蛋白胆固醇 0未知/1从未异常/2一过性/3反复/4持续",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HDLC_crossed_up",
+    "group": "temporal",
+    "dtype": "binary",
+    "indicator": "HDLC",
+    "description": "高密度脂蛋白胆固醇 窗口内是否发生正常→异常跨界",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "LDLC_n_obs",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "LDLC",
+    "description": "低密度脂蛋白胆固醇 窗口内观测次数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "LDLC_last",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "LDLC",
+    "description": "低密度脂蛋白胆固醇 最近一次值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "LDLC_prev",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "LDLC",
+    "description": "低密度脂蛋白胆固醇 上一次值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "LDLC_delta",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "LDLC",
+    "description": "低密度脂蛋白胆固醇 最近两次绝对变化",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "LDLC_delta_rate",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "LDLC",
+    "description": "低密度脂蛋白胆固醇 最近两次变化速率(每月)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "LDLC_slope",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "LDLC",
+    "description": "低密度脂蛋白胆固醇 窗口 OLS 斜率(每月)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "LDLC_slope_r2",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "LDLC",
+    "description": "低密度脂蛋白胆固醇 斜率拟合优度 R²(区分稳定趋势与震荡)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "LDLC_mean",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "LDLC",
+    "description": "低密度脂蛋白胆固醇 窗口均值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "LDLC_std",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "LDLC",
+    "description": "低密度脂蛋白胆固醇 窗口标准差",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "LDLC_cv",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "LDLC",
+    "description": "低密度脂蛋白胆固醇 窗口变异系数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "LDLC_min",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "LDLC",
+    "description": "低密度脂蛋白胆固醇 窗口最小值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "LDLC_max",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "LDLC",
+    "description": "低密度脂蛋白胆固醇 窗口最大值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "LDLC_range",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "LDLC",
+    "description": "低密度脂蛋白胆固醇 窗口极差",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "LDLC_span_days",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "LDLC",
+    "description": "低密度脂蛋白胆固醇 窗口首末观测间隔天数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "LDLC_n_abnormal",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "LDLC",
+    "description": "低密度脂蛋白胆固醇 窗口内异常次数",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "LDLC_abnormal_ratio",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "LDLC",
+    "description": "低密度脂蛋白胆固醇 窗口内异常比例",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "LDLC_max_grade",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "LDLC",
+    "description": "低密度脂蛋白胆固醇 窗口内最严重异常分级",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "LDLC_trend",
+    "group": "temporal",
+    "dtype": "categorical",
+    "indicator": "LDLC",
+    "description": "低密度脂蛋白胆固醇 趋势标签 0未知/1平稳/2上升/3下降(基于RCV)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "LDLC_persistence",
+    "group": "temporal",
+    "dtype": "categorical",
+    "indicator": "LDLC",
+    "description": "低密度脂蛋白胆固醇 0未知/1从未异常/2一过性/3反复/4持续",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "LDLC_crossed_up",
+    "group": "temporal",
+    "dtype": "binary",
+    "indicator": "LDLC",
+    "description": "低密度脂蛋白胆固醇 窗口内是否发生正常→异常跨界",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "PLT_n_obs",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "PLT",
+    "description": "血小板计数 窗口内观测次数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "PLT_last",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "PLT",
+    "description": "血小板计数 最近一次值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "PLT_prev",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "PLT",
+    "description": "血小板计数 上一次值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "PLT_delta",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "PLT",
+    "description": "血小板计数 最近两次绝对变化",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "PLT_delta_rate",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "PLT",
+    "description": "血小板计数 最近两次变化速率(每月)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "PLT_slope",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "PLT",
+    "description": "血小板计数 窗口 OLS 斜率(每月)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "PLT_slope_r2",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "PLT",
+    "description": "血小板计数 斜率拟合优度 R²(区分稳定趋势与震荡)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "PLT_mean",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "PLT",
+    "description": "血小板计数 窗口均值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "PLT_std",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "PLT",
+    "description": "血小板计数 窗口标准差",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "PLT_cv",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "PLT",
+    "description": "血小板计数 窗口变异系数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "PLT_min",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "PLT",
+    "description": "血小板计数 窗口最小值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "PLT_max",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "PLT",
+    "description": "血小板计数 窗口最大值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "PLT_range",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "PLT",
+    "description": "血小板计数 窗口极差",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "PLT_span_days",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "PLT",
+    "description": "血小板计数 窗口首末观测间隔天数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "PLT_n_abnormal",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "PLT",
+    "description": "血小板计数 窗口内异常次数",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "PLT_abnormal_ratio",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "PLT",
+    "description": "血小板计数 窗口内异常比例",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "PLT_max_grade",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "PLT",
+    "description": "血小板计数 窗口内最严重异常分级",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "PLT_trend",
+    "group": "temporal",
+    "dtype": "categorical",
+    "indicator": "PLT",
+    "description": "血小板计数 趋势标签 0未知/1平稳/2上升/3下降(基于RCV)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "PLT_persistence",
+    "group": "temporal",
+    "dtype": "categorical",
+    "indicator": "PLT",
+    "description": "血小板计数 0未知/1从未异常/2一过性/3反复/4持续",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "PLT_crossed_up",
+    "group": "temporal",
+    "dtype": "binary",
+    "indicator": "PLT",
+    "description": "血小板计数 窗口内是否发生正常→异常跨界",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "HGB_n_obs",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HGB",
+    "description": "血红蛋白 窗口内观测次数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HGB_last",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HGB",
+    "description": "血红蛋白 最近一次值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HGB_prev",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HGB",
+    "description": "血红蛋白 上一次值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HGB_delta",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HGB",
+    "description": "血红蛋白 最近两次绝对变化",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HGB_delta_rate",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HGB",
+    "description": "血红蛋白 最近两次变化速率(每月)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HGB_slope",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HGB",
+    "description": "血红蛋白 窗口 OLS 斜率(每月)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HGB_slope_r2",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HGB",
+    "description": "血红蛋白 斜率拟合优度 R²(区分稳定趋势与震荡)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HGB_mean",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HGB",
+    "description": "血红蛋白 窗口均值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HGB_std",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HGB",
+    "description": "血红蛋白 窗口标准差",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HGB_cv",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HGB",
+    "description": "血红蛋白 窗口变异系数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HGB_min",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HGB",
+    "description": "血红蛋白 窗口最小值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HGB_max",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HGB",
+    "description": "血红蛋白 窗口最大值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HGB_range",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HGB",
+    "description": "血红蛋白 窗口极差",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HGB_span_days",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HGB",
+    "description": "血红蛋白 窗口首末观测间隔天数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HGB_n_abnormal",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HGB",
+    "description": "血红蛋白 窗口内异常次数",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "HGB_abnormal_ratio",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HGB",
+    "description": "血红蛋白 窗口内异常比例",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "HGB_max_grade",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "HGB",
+    "description": "血红蛋白 窗口内最严重异常分级",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HGB_trend",
+    "group": "temporal",
+    "dtype": "categorical",
+    "indicator": "HGB",
+    "description": "血红蛋白 趋势标签 0未知/1平稳/2上升/3下降(基于RCV)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HGB_persistence",
+    "group": "temporal",
+    "dtype": "categorical",
+    "indicator": "HGB",
+    "description": "血红蛋白 0未知/1从未异常/2一过性/3反复/4持续",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HGB_crossed_up",
+    "group": "temporal",
+    "dtype": "binary",
+    "indicator": "HGB",
+    "description": "血红蛋白 窗口内是否发生正常→异常跨界",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "CRP_n_obs",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "CRP",
+    "description": "C反应蛋白 窗口内观测次数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "CRP_last",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "CRP",
+    "description": "C反应蛋白 最近一次值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "CRP_prev",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "CRP",
+    "description": "C反应蛋白 上一次值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "CRP_delta",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "CRP",
+    "description": "C反应蛋白 最近两次绝对变化",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "CRP_delta_rate",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "CRP",
+    "description": "C反应蛋白 最近两次变化速率(每月)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "CRP_slope",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "CRP",
+    "description": "C反应蛋白 窗口 OLS 斜率(每月)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "CRP_slope_r2",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "CRP",
+    "description": "C反应蛋白 斜率拟合优度 R²(区分稳定趋势与震荡)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "CRP_mean",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "CRP",
+    "description": "C反应蛋白 窗口均值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "CRP_std",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "CRP",
+    "description": "C反应蛋白 窗口标准差",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "CRP_cv",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "CRP",
+    "description": "C反应蛋白 窗口变异系数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "CRP_min",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "CRP",
+    "description": "C反应蛋白 窗口最小值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "CRP_max",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "CRP",
+    "description": "C反应蛋白 窗口最大值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "CRP_range",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "CRP",
+    "description": "C反应蛋白 窗口极差",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "CRP_span_days",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "CRP",
+    "description": "C反应蛋白 窗口首末观测间隔天数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "CRP_n_abnormal",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "CRP",
+    "description": "C反应蛋白 窗口内异常次数",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "CRP_abnormal_ratio",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "CRP",
+    "description": "C反应蛋白 窗口内异常比例",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "CRP_max_grade",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "CRP",
+    "description": "C反应蛋白 窗口内最严重异常分级",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "CRP_trend",
+    "group": "temporal",
+    "dtype": "categorical",
+    "indicator": "CRP",
+    "description": "C反应蛋白 趋势标签 0未知/1平稳/2上升/3下降(基于RCV)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "CRP_persistence",
+    "group": "temporal",
+    "dtype": "categorical",
+    "indicator": "CRP",
+    "description": "C反应蛋白 0未知/1从未异常/2一过性/3反复/4持续",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "CRP_crossed_up",
+    "group": "temporal",
+    "dtype": "binary",
+    "indicator": "CRP",
+    "description": "C反应蛋白 窗口内是否发生正常→异常跨界",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "SBP_n_obs",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "SBP",
+    "description": "收缩压 窗口内观测次数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "SBP_last",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "SBP",
+    "description": "收缩压 最近一次值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "SBP_prev",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "SBP",
+    "description": "收缩压 上一次值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "SBP_delta",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "SBP",
+    "description": "收缩压 最近两次绝对变化",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "SBP_delta_rate",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "SBP",
+    "description": "收缩压 最近两次变化速率(每月)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "SBP_slope",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "SBP",
+    "description": "收缩压 窗口 OLS 斜率(每月)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "SBP_slope_r2",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "SBP",
+    "description": "收缩压 斜率拟合优度 R²(区分稳定趋势与震荡)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "SBP_mean",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "SBP",
+    "description": "收缩压 窗口均值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "SBP_std",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "SBP",
+    "description": "收缩压 窗口标准差",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "SBP_cv",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "SBP",
+    "description": "收缩压 窗口变异系数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "SBP_min",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "SBP",
+    "description": "收缩压 窗口最小值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "SBP_max",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "SBP",
+    "description": "收缩压 窗口最大值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "SBP_range",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "SBP",
+    "description": "收缩压 窗口极差",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "SBP_span_days",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "SBP",
+    "description": "收缩压 窗口首末观测间隔天数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "SBP_n_abnormal",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "SBP",
+    "description": "收缩压 窗口内异常次数",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "SBP_abnormal_ratio",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "SBP",
+    "description": "收缩压 窗口内异常比例",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "SBP_max_grade",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "SBP",
+    "description": "收缩压 窗口内最严重异常分级",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "SBP_trend",
+    "group": "temporal",
+    "dtype": "categorical",
+    "indicator": "SBP",
+    "description": "收缩压 趋势标签 0未知/1平稳/2上升/3下降(基于RCV)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "SBP_persistence",
+    "group": "temporal",
+    "dtype": "categorical",
+    "indicator": "SBP",
+    "description": "收缩压 0未知/1从未异常/2一过性/3反复/4持续",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "SBP_crossed_up",
+    "group": "temporal",
+    "dtype": "binary",
+    "indicator": "SBP",
+    "description": "收缩压 窗口内是否发生正常→异常跨界",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "DBP_n_obs",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "DBP",
+    "description": "舒张压 窗口内观测次数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "DBP_last",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "DBP",
+    "description": "舒张压 最近一次值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "DBP_prev",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "DBP",
+    "description": "舒张压 上一次值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "DBP_delta",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "DBP",
+    "description": "舒张压 最近两次绝对变化",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "DBP_delta_rate",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "DBP",
+    "description": "舒张压 最近两次变化速率(每月)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "DBP_slope",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "DBP",
+    "description": "舒张压 窗口 OLS 斜率(每月)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "DBP_slope_r2",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "DBP",
+    "description": "舒张压 斜率拟合优度 R²(区分稳定趋势与震荡)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "DBP_mean",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "DBP",
+    "description": "舒张压 窗口均值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "DBP_std",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "DBP",
+    "description": "舒张压 窗口标准差",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "DBP_cv",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "DBP",
+    "description": "舒张压 窗口变异系数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "DBP_min",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "DBP",
+    "description": "舒张压 窗口最小值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "DBP_max",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "DBP",
+    "description": "舒张压 窗口最大值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "DBP_range",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "DBP",
+    "description": "舒张压 窗口极差",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "DBP_span_days",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "DBP",
+    "description": "舒张压 窗口首末观测间隔天数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "DBP_n_abnormal",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "DBP",
+    "description": "舒张压 窗口内异常次数",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "DBP_abnormal_ratio",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "DBP",
+    "description": "舒张压 窗口内异常比例",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "DBP_max_grade",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "DBP",
+    "description": "舒张压 窗口内最严重异常分级",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "DBP_trend",
+    "group": "temporal",
+    "dtype": "categorical",
+    "indicator": "DBP",
+    "description": "舒张压 趋势标签 0未知/1平稳/2上升/3下降(基于RCV)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "DBP_persistence",
+    "group": "temporal",
+    "dtype": "categorical",
+    "indicator": "DBP",
+    "description": "舒张压 0未知/1从未异常/2一过性/3反复/4持续",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "DBP_crossed_up",
+    "group": "temporal",
+    "dtype": "binary",
+    "indicator": "DBP",
+    "description": "舒张压 窗口内是否发生正常→异常跨界",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "BMI_n_obs",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "BMI",
+    "description": "体质指数 窗口内观测次数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "BMI_last",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "BMI",
+    "description": "体质指数 最近一次值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "BMI_prev",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "BMI",
+    "description": "体质指数 上一次值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "BMI_delta",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "BMI",
+    "description": "体质指数 最近两次绝对变化",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "BMI_delta_rate",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "BMI",
+    "description": "体质指数 最近两次变化速率(每月)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "BMI_slope",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "BMI",
+    "description": "体质指数 窗口 OLS 斜率(每月)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "BMI_slope_r2",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "BMI",
+    "description": "体质指数 斜率拟合优度 R²(区分稳定趋势与震荡)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "BMI_mean",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "BMI",
+    "description": "体质指数 窗口均值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "BMI_std",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "BMI",
+    "description": "体质指数 窗口标准差",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "BMI_cv",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "BMI",
+    "description": "体质指数 窗口变异系数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "BMI_min",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "BMI",
+    "description": "体质指数 窗口最小值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "BMI_max",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "BMI",
+    "description": "体质指数 窗口最大值",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "BMI_range",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "BMI",
+    "description": "体质指数 窗口极差",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "BMI_span_days",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "BMI",
+    "description": "体质指数 窗口首末观测间隔天数",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "BMI_n_abnormal",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "BMI",
+    "description": "体质指数 窗口内异常次数",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "BMI_abnormal_ratio",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "BMI",
+    "description": "体质指数 窗口内异常比例",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "BMI_max_grade",
+    "group": "temporal",
+    "dtype": "numeric",
+    "indicator": "BMI",
+    "description": "体质指数 窗口内最严重异常分级",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "BMI_trend",
+    "group": "temporal",
+    "dtype": "categorical",
+    "indicator": "BMI",
+    "description": "体质指数 趋势标签 0未知/1平稳/2上升/3下降(基于RCV)",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "BMI_persistence",
+    "group": "temporal",
+    "dtype": "categorical",
+    "indicator": "BMI",
+    "description": "体质指数 0未知/1从未异常/2一过性/3反复/4持续",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "BMI_crossed_up",
+    "group": "temporal",
+    "dtype": "binary",
+    "indicator": "BMI",
+    "description": "体质指数 窗口内是否发生正常→异常跨界",
+    "monotone": 1,
+    "allow_missing": true
+  },
+  {
+    "name": "acute_infection",
+    "group": "confounder",
+    "dtype": "binary",
+    "indicator": null,
+    "description": "索引日期前14天内存在近期感染/急性炎症",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "LDLC_confounded",
+    "group": "confounder",
+    "dtype": "binary",
+    "indicator": "LDLC",
+    "description": "LDLC 受用药/急性状态干扰",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "LDLC_reliability",
+    "group": "confounder",
+    "dtype": "numeric",
+    "indicator": "LDLC",
+    "description": "LDLC 可靠度 0~1(1=无干扰)。供归因输出时降级展示",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HDLC_confounded",
+    "group": "confounder",
+    "dtype": "binary",
+    "indicator": "HDLC",
+    "description": "HDLC 受用药/急性状态干扰",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "HDLC_reliability",
+    "group": "confounder",
+    "dtype": "numeric",
+    "indicator": "HDLC",
+    "description": "HDLC 可靠度 0~1(1=无干扰)。供归因输出时降级展示",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "CRP_confounded",
+    "group": "confounder",
+    "dtype": "binary",
+    "indicator": "CRP",
+    "description": "CRP 受用药/急性状态干扰",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "CRP_reliability",
+    "group": "confounder",
+    "dtype": "numeric",
+    "indicator": "CRP",
+    "description": "CRP 可靠度 0~1(1=无干扰)。供归因输出时降级展示",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "GLU_confounded",
+    "group": "confounder",
+    "dtype": "binary",
+    "indicator": "GLU",
+    "description": "GLU 受用药/急性状态干扰",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "GLU_reliability",
+    "group": "confounder",
+    "dtype": "numeric",
+    "indicator": "GLU",
+    "description": "GLU 可靠度 0~1(1=无干扰)。供归因输出时降级展示",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "PLT_confounded",
+    "group": "confounder",
+    "dtype": "binary",
+    "indicator": "PLT",
+    "description": "PLT 受用药/急性状态干扰",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "PLT_reliability",
+    "group": "confounder",
+    "dtype": "numeric",
+    "indicator": "PLT",
+    "description": "PLT 可靠度 0~1(1=无干扰)。供归因输出时降级展示",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "ALB_confounded",
+    "group": "confounder",
+    "dtype": "binary",
+    "indicator": "ALB",
+    "description": "ALB 受用药/急性状态干扰",
+    "monotone": 0,
+    "allow_missing": true
+  },
+  {
+    "name": "ALB_reliability",
+    "group": "confounder",
+    "dtype": "numeric",
+    "indicator": "ALB",
+    "description": "ALB 可靠度 0~1(1=无干扰)。供归因输出时降级展示",
+    "monotone": 0,
+    "allow_missing": true
+  }
+]

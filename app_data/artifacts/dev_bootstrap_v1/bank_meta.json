@@ -1,0 +1,37 @@
+{
+  "horizons": [
+    [
+      "1y",
+      365
+    ],
+    [
+      "3y",
+      1095
+    ],
+    [
+      "5y",
+      1825
+    ]
+  ],
+  "enforce_monotonic": true,
+  "label_stats": {
+    "1y": {
+      "n_total": 2600,
+      "n_pos": 390,
+      "n_neg": 2161,
+      "n_censored": 49
+    },
+    "3y": {
+      "n_total": 2600,
+      "n_pos": 738,
+      "n_neg": 1269,
+      "n_censored": 593
+    },
+    "5y": {
+      "n_total": 2600,
+      "n_pos": 900,
+      "n_neg": 666,
+      "n_censored": 1034
+    }
+  }
+}
