@@ -20,21 +20,50 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-# 自动加载项目根目录 .env 环境变量（注入 API 密钥、模型配置等）
-_env_file = Path(__file__).resolve().parent / ".env"
-if _env_file.exists():
-    for _line in _env_file.read_text(encoding="utf-8", errors="ignore").splitlines():
-        _line = _line.strip()
-        if _line and not _line.startswith("#") and "=" in _line:
-            _k, _v = _line.split("=", 1)
-            _k, _v = _k.strip(), _v.strip()
-            if _k and _k not in os.environ:
-                os.environ[_k] = _v
+def _load_dotenv(path: Path) -> int:
+    """
+    零依赖 .env 加载（V3.5）。
+
+    根因回填：此前应用【从未】读取 .env——用户把 ANTHROPIC_API_KEY 写进
+    .env 后，os.environ 里依然是空，Vision OCR 与在线 LLM 全部静默跳过、
+    一路走离线兜底，且没有任何提示。"配了密钥却没效果"即源于此。
+
+    规则：KEY=VALUE 逐行读取；# 开头为注释；已存在的环境变量【不覆盖】
+    （显式 export 的优先级最高）；值两侧的引号剥掉。返回载入条数。
+    """
+    import os
+    if not path.exists():
+        return 0
+    n = 0
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, _, v = line.partition("=")
+        k, v = k.strip(), v.strip().strip("'\"")
+        if k and k not in os.environ:
+            os.environ[k] = v
+            n += 1
+    return n
+
+
+_N_ENV = _load_dotenv(Path(__file__).resolve().parent / ".env")
 
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
                     datefmt="%H:%M:%S")
 log = logging.getLogger("run_app")
+
+# 启动即声明 AI 能力状态——"密钥到底有没有生效"不许再是谜
+import os as _os  # noqa: E402
+log.info(".env 已载入 %d 项环境变量", _N_ENV)
+if _os.environ.get("ANTHROPIC_API_KEY"):
+    log.info("AI 视觉识别: ✅ 已启用 (model=%s, endpoint=%s)",
+             _os.environ.get("VISION_MODEL", "claude-sonnet-4-6"),
+             _os.environ.get("ANTHROPIC_BASE_URL", "https://api.anthropic.com"))
+else:
+    log.warning("AI 视觉识别: ❌ 未配置 ANTHROPIC_API_KEY —— "
+                "OCR 将只用本地引擎（对横拍/模糊照片识别质量明显更差）")
 
 
 def main() -> None:

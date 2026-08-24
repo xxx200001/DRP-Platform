@@ -484,6 +484,11 @@ def build_server(app_data: str | Path):
             "disclaimer": DISCLAIMER,
             "sample_report": SAMPLE_REPORT,
             "active_version": active.version if active else None,
+            # V3.5：AI 能力状态透明化——"密钥有没有生效"前端可直接看到
+            "vision": {
+                "enabled": bool(os.environ.get("ANTHROPIC_API_KEY")),
+                "model": os.environ.get("VISION_MODEL", "claude-sonnet-4-6"),
+            },
             "canary": ({"version": canary.version, "traffic_pct": canary.traffic_pct}
                        if canary else None),
             "stats": st.db.stats(),
@@ -647,7 +652,9 @@ def build_server(app_data: str | Path):
             "stored": stored,
             "parse": preport.to_log_dict(),
             "cleaning_summary": cleaning_summary,
-            "rows": [r.to_log_dict() for r in rows],
+            # V3.5：逐行标注是否真实入库——"待复核"的行以前也被前端标成
+            # "已入库"，这是误导。stored 与写库口径完全一致（ingestible）。
+            "rows": [{**r.to_log_dict(), "stored": bool(r.ingestible)} for r in rows],
         }
 
     # ---------------- 报告管理（改版·改动 1：8 份报告逐份可见、可管理） ----------------
@@ -747,7 +754,7 @@ def build_server(app_data: str | Path):
         return {
             "report_id": report_id, "stored": stored,
             "parse": preport.to_log_dict(),
-            "rows": [r.to_log_dict() for r in rows],
+            "rows": [{**r.to_log_dict(), "stored": bool(r.ingestible)} for r in rows],
         }
 
     # ---------------- 健康时间轴（改版·改动 1：上传完先"数据确认"再预测） ----------------

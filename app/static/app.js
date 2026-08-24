@@ -134,6 +134,17 @@ async function boot() {
 
   $("#disclaimerBar").textContent = "免责声明：" + m.disclaimer;
   $("#railVersion").textContent = m.active_version || "未上线";
+  // V3.5：AI 识别状态钉在侧栏——密钥没生效时不许再静默
+  const rv = $("#railVersion");
+  if (rv) {
+    const ai = document.createElement("div");
+    ai.className = "rail-ai " + (m.vision?.enabled ? "on" : "off");
+    ai.textContent = m.vision?.enabled ? "AI识别:开" : "AI识别:关";
+    ai.title = m.vision?.enabled
+      ? `视觉识别已启用（${m.vision.model}）`
+      : "未配置 ANTHROPIC_API_KEY，OCR 仅用本地引擎";
+    rv.after(ai);
+  }
   $("#railVersion").title = m.canary
     ? `灰度 ${m.canary.version} @ ${m.canary.traffic_pct}%` : "无灰度";
   $("#repDate").value = new Date().toISOString().slice(0, 10);
@@ -709,7 +720,9 @@ function renderReports() {
             title="修改检查日期后自动保存"></span>
       <span class="rep-name mono">#${r.id}</span>
       <span class="num">${r.n_stored} 项</span>
-      <span>${r.n_stored ? `<span class="tag t1">✓ 已入库</span>` : `<span class="tag t2">无有效指标</span>`}</span>
+      <span>${r.n_stored ? `<span class="tag t1">✓ 已入库</span>`
+        : r.kind ? `<span class="tag line" title="该类报告本就没有量化指标，属正常">${esc(r.kind)}</span>`
+        : `<span class="tag t2">无有效指标</span>`}</span>
       <span class="rep-ops">
         <button class="mini" data-view="${r.id}">查看原文</button>
         <button class="mini" data-reparse="${r.id}">重新识别</button>
@@ -816,27 +829,38 @@ function renderTimeline() {
 
 function renderParse(r) {
   $("#parseOut").hidden = false;
-  // 过滤只展示成功匹配并入库的指标，不展示失败或噪声行
-  const validRows = (r.rows || []).filter((row) => row.indicator_code && row.value != null);
+  const ISSUE_CN = {
+    unit_missing: "缺单位", unit_or_scale_suspect: "量级存疑",
+    indicator_unmatched: "未匹配词典", value_implausible: "数值超生理极限",
+  };
+  const rows = (r.rows || []).filter((row) => row.indicator_code && row.value != null);
+  const stored = rows.filter((row) => row.stored);
+  const review = rows.filter((row) => !row.stored);
 
   $("#parseStats").innerHTML = `
-    <div class="stat"><div class="v" style="color:var(--primary)">${validRows.length}</div><div class="k">已成功入库指标</div></div>
-    <div class="stat"><div class="v">${r.parse.n_lines || validRows.length}</div><div class="k">扫描文本行数</div></div>
+    <div class="stat"><div class="v" style="color:var(--primary)">${stored.length}</div><div class="k">已成功入库指标</div></div>
+    <div class="stat"><div class="v">${review.length}</div><div class="k">待复核</div></div>
+    <div class="stat"><div class="v">${r.parse.n_lines || rows.length}</div><div class="k">扫描文本行数</div></div>
   `;
 
-  if (validRows.length === 0) {
+  if (rows.length === 0) {
     $("#parseRows").innerHTML = `<div class="muted" style="padding:12px">未识别到标准检验指标，请核对单据内容或重新拍摄。</div>`;
     return;
   }
 
-  $("#parseRows").innerHTML = validRows.map((row) => {
+  $("#parseRows").innerHTML = rows.map((row) => {
+    const badge = row.stored
+      ? `<span class="tag t1" style="margin-left:8px">已入库</span>`
+      : `<span class="tag t3" style="margin-left:8px">待复核</span>`;
+    const iss = (row.issues || []).map((x) => ISSUE_CN[x] || x).join("·");
     return `
       <div class="rowitem static">
         <span class="grow">
           <span class="t1line">
             <b style="font-size:14px;color:var(--text)">${esc(row.indicator_code)}</b>
             <span class="mono" style="font-size:14px;font-weight:600;margin-left:6px">${num(row.value)} ${esc(row.unit || "")}</span>
-            <span class="tag t1" style="margin-left:8px">已入库</span>
+            ${badge}
+            ${iss && !row.stored ? `<span class="muted" style="margin-left:6px;font-size:11.5px">${esc(iss)}</span>` : ""}
           </span>
           <span class="raw" title="${esc(row.raw_line)}">${esc(row.raw_line)}</span>
         </span>

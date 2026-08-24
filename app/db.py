@@ -287,16 +287,29 @@ class AppDB:
     # 注意：本表【有意】不存原始图片 —— 化验单图片上通常印有姓名等明文 PII，
     # 与规范 1.2 冲突；可回看的是已过 scan_pii 的 OCR/粘贴文本（raw_text）。
     def list_reports(self, patient_id: str) -> list[dict]:
-        """该患者全部报告（按真实检查日期 measured_at 升序），附每份实际入库指标数。"""
+        """该患者全部报告（按真实检查日期 measured_at 升序），附每份实际入库指标数与报告类型。"""
         rows = self.conn.execute(
-            """SELECT r.id, r.measured_at, r.created_at,
+            """SELECT r.id, r.measured_at, r.created_at, r.raw_text,
                       r.n_ingested, r.n_review, r.n_unmatched,
                       (SELECT COUNT(*) FROM lab_records l WHERE l.report_id = r.id) AS n_stored
                FROM reports r WHERE r.patient_id=?
                ORDER BY r.measured_at, r.id""",
             (patient_id,),
         ).fetchall()
-        return [dict(r) for r in rows]
+        out = []
+        for r in rows:
+            d = dict(r)
+            raw = d.pop("raw_text", "") or ""
+            # V3.5 智能分类：0 项量化指标不等于识别失败，可能是定性/影像报告
+            kind = ""
+            if d["n_stored"] == 0:
+                if "超声" in raw or "影像" in raw or "CT" in raw or "MRI" in raw:
+                    kind = "影像报告"
+                elif raw.count("阴性") + raw.count("阳性") >= 3:
+                    kind = "定性报告"
+            d["kind"] = kind
+            out.append(d)
+        return out
 
     def get_report(self, report_id: int) -> dict | None:
         row = self.conn.execute(

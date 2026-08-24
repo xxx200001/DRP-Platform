@@ -66,7 +66,7 @@ class TestRealReportsCoverage(unittest.TestCase):
             _, _, got = self._parse(rep)
             total_got += len(got & rep["expect"])
         self.assertEqual(total_got, total_expect)
-        self.assertGreaterEqual(total_expect, 61)
+        self.assertGreaterEqual(total_expect, 66)   # 61 + 拆小数变体 5 项
 
     def test_no_phantom_indicators(self):
         """不得凭空多出指标（定性行/影像描述/比值行不许乱入量化帧）。"""
@@ -96,6 +96,11 @@ class TestRealReportsCoverage(unittest.TestCase):
             ("免疫全套", "IGA", 3.59),
             # HR 互认前缀行
             ("肝功能(HR互认·旋转拍摄)", "ALT", 97.0),
+            # 拆小数实拍变体：值必须是 9.28/3.59/1.40，绝不能是 9/3/1
+            ("免疫全套(实拍·RapidOCR拆小数+单位列错位)", "IGG", 9.28),
+            ("免疫全套(实拍·RapidOCR拆小数+单位列错位)", "IGA", 3.59),
+            ("免疫全套(实拍·RapidOCR拆小数+单位列错位)", "IGM", 1.40),
+            ("免疫全套(实拍·RapidOCR拆小数+单位列错位)", "C3", 152.9),
             ("肝功能(HR互认·旋转拍摄)", "GGT", 64.0),
         ]
         for rep_name, code, expected in checks:
@@ -139,6 +144,14 @@ class TestParserFormatRegression(unittest.TestCase):
             self.assertIn(code, got, text)
             v = float(frame[frame["indicator_code"] == code]["value"].iloc[0])
             self.assertAlmostEqual(v, val, places=2)
+
+    def test_split_decimal_value_first_line_not_eaten_as_seq(self):
+        """"5. 45 ↑ <5. 20"（值开头+拆小数）：合并须先于序号剥离，
+        否则 "5. " 被当序号吃掉、值变 45——这是 V3.5 合并规则前置的守卫。"""
+        frame, _, rows = self._one("总胆固醇 5. 45 ↑ <5. 20 mmol/L")
+        self.assertIn("TC", set(frame["indicator_code"]))
+        v = float(frame[frame["indicator_code"] == "TC"]["value"].iloc[0])
+        self.assertAlmostEqual(v, 5.45, places=2)
 
     def test_magnitude_suspect_still_goes_to_review(self):
         """mg/dL 肌酐的量级疑点必须仍然拦进人工复核（不是回退，是既有设计）。"""

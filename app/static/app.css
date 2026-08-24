@@ -909,3 +909,8 @@ details.fold > summary:hover { color: var(--ink); }
 
 /* 趋势页引导条关闭键 */
 .trend-banner #tgClose { padding-inline: 10px; }
+
+/* V3.5：侧栏 AI 识别状态标 */
+.rail-ai { font-size: 10.5px; margin-top: 4px; letter-spacing: .02em; }
+.rail-ai.on { color: var(--t1); }
+.rail-ai.off { color: var(--t3); }
