@@ -77,12 +77,12 @@ class DeptRule:
 DEPARTMENT_RULES: tuple[DeptRule, ...] = (
     DeptRule(
         "肝功能", "消化内科（或肝病科）",
-        ("ALT", "AST", "GGT", "ALP", "TBIL", "DBIL", "ALB", "TP"),
+        ("ALT", "AST", "GGT", "ALP", "TBIL", "DBIL", "IBIL", "ALB", "GLB", "TP", "AGR", "TBA", "LAP"),
         ("肝功能全套复查", "腹部超声检查", "肝炎相关指标筛查"),
     ),
     DeptRule(
         "肾功能", "肾内科",
-        ("CREA", "UREA", "UA", "UACR"),
+        ("CREA", "UREA", "UA", "UACR", "RBP"),
         ("肾功能复查", "尿常规检查", "泌尿系统超声检查"),
     ),
     DeptRule(
@@ -102,8 +102,23 @@ DEPARTMENT_RULES: tuple[DeptRule, ...] = (
     ),
     DeptRule(
         "电解质", "肾内科（或内分泌科）",
-        ("K", "NA", "CA"),
+        ("K", "NA", "CL", "CA", "P"),
         ("电解质复查", "肾功能检查", "心电图检查"),
+    ),
+    DeptRule(
+        "心肌酶谱", "心血管内科",
+        ("LDH", "CK", "CKMB"),
+        ("心肌酶谱复查", "心电图检查", "心脏超声检查"),
+    ),
+    DeptRule(
+        "消化酶谱", "消化内科",
+        ("AMY",),
+        ("血淀粉酶复查", "腹部超声检查"),
+    ),
+    DeptRule(
+        "免疫指标", "风湿免疫科",
+        ("IGG", "IGA", "IGM", "C3", "C4"),
+        ("免疫球蛋白全套复查", "补体C3/C4复查"),
     ),
     DeptRule(
         "炎症指标", "全科医学科（或感染科）",

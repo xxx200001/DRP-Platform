@@ -326,10 +326,13 @@ class LabReportParser:
         unit = None
         um = _UNIT_AFTER_VALUE.match(rest)
         if um:
-            unit = um.group("unit").strip()
+            cand = um.group("unit").strip()
             # 6.5×10^9/L 里的 ×/x 是数值科学计数的乘号，不是单位的一部分
-            if re.match(r"^[x×]10", unit):
-                unit = unit[1:]
+            if re.match(r"^[x×]10", cand):
+                cand = cand[1:]
+            # 孤立的 H/L 是高低标记不是单位
+            if not re.fullmatch(r"[HLhl]", cand):
+                unit = cand
         if unit is None:
             # V3.1 兜底：真实报告的列序常为「结果 参考区间 单位」，值后紧跟的是
             # 裸单侧区间（"4.0 <10.0 μmol/L"，无"参考"前缀故未被上面摘走），
