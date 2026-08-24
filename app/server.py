@@ -1353,25 +1353,56 @@ def _ocr_extract_image(image_b64: str) -> dict:
     通用图片 OCR 识别，返回结构化结果：
       {"text", "engine", "rotation"(顺时针角度), "layout", "n_redacted"}
 
-    V3.1 三处升级（对应用户实测反馈"识别不准确不完整"）：
-      · 方向自适应：横版报告竖着拍是常态。对 0/90/180/270 四个方向各跑一遍，
-        按 Σ(置信度×文本权重) 取最优 —— 转错方向时中文识别近乎全灭，
-        评分差距是数量级的，误选概率极低。四跑的代价（秒级）换准确率，
-        对单机 Demo 是正确取舍；生产可先跑 0°、低分再补跑其余方向。
-      · 双栏重排：左右分栏逐行拆开输出，一行一指标，右栏不再丢失。
-      · 入库前脱敏：姓名/手机号/证件号等替换为 [已脱敏]（原图本就不落库）。
+    V3.2 策略调整：
+      **优先 Vision API**（AI 理解化验单表格结构、双栏、旋转远优于纯像素 OCR），
+      RapidOCR 仅在 Vision 不可用时兜底。
+      原 V3.1 的 RapidOCR 四方向 + 双栏重排逻辑完整保留作为离线兜底方案。
     """
     import base64
-    import cv2
-
-    from .ocr_layout import (
-        redact_pii_text, reconstruct_lines, text_weight,
-    )
 
     clean_b64 = image_b64.split(",", 1)[1] if "," in image_b64 else image_b64
 
-    # --- 1. 本地 RapidOCR：四方向试跑取最优 ---
+    # --- 1. 优先 Vision API（AI 识别化验单准确率远高于本地 OCR） ---
     try:
+        vision = _ai_vision_ocr_extract(image_b64)
+        if vision:
+            lines = []
+            collected_at = ""
+            if isinstance(vision, dict):
+                collected_at = str(vision.get("collected_at") or "").strip()
+                vision_items = vision.get("indicators") or []
+            else:
+                vision_items = vision
+            for ind in vision_items:
+                name = ind.get("name_raw", "")
+                val = ind.get("value", "")
+                unit = ind.get("unit", "")
+                ref = ind.get("reference", "")
+                line = f"{name} {val} {unit}"
+                if ref:
+                    line += f" {ref}"
+                lines.append(line)
+            if collected_at:
+                lines.append(f"采集时间：{collected_at}")
+            from .ocr_layout import redact_pii_text as _red
+            text, n_red = _red("\n".join(lines))
+            logger.info("[OCR] Vision API 成功识别 %d 条指标", len(vision_items))
+            return {
+                "text": text, "engine": "vision",
+                "rotation": 0, "layout": "single", "n_redacted": n_red,
+            }
+        else:
+            logger.info("[OCR] Vision API 返回空结果，回退到 RapidOCR...")
+    except Exception as e:
+        logger.warning("[OCR] Vision API 异常 (%s)，回退到 RapidOCR...", e)
+
+    # --- 2. RapidOCR 兜底（四方向 + 双栏重排，完整保留） ---
+    try:
+        import cv2
+        from .ocr_layout import (
+            redact_pii_text, reconstruct_lines, text_weight,
+        )
+
         engine = _get_rapid_ocr()
         if engine is not None:
             raw = base64.b64decode(clean_b64)
@@ -1399,37 +1430,7 @@ def _ocr_extract_image(image_b64: str) -> dict:
                         "rotation": deg, "layout": layout, "n_redacted": n_red,
                     }
     except Exception as e:
-        logger.warning("[OCR] RapidOCR 执行异常 (%s)，尝试 Vision 兜底...", e)
-
-    # --- 2. Vision API 兜底 ---
-    vision = _ai_vision_ocr_extract(image_b64)
-    if vision:
-        lines = []
-        collected_at = ""
-        if isinstance(vision, dict):
-            collected_at = str(vision.get("collected_at") or "").strip()
-            vision_items = vision.get("indicators") or []
-        else:  # 兼容旧格式：模型直接返回指标数组
-            vision_items = vision
-        for ind in vision_items:
-            name = ind.get("name_raw", "")
-            val = ind.get("value", "")
-            unit = ind.get("unit", "")
-            ref = ind.get("reference", "")
-            line = f"{name} {val} {unit}"
-            if ref:
-                line += f" {ref}"
-            lines.append(line)
-        if collected_at:
-            # 让 _detect_report_date 的「采集」关键词能命中 —— 视觉兜底
-            # 此前只回传指标行，日期识别在这条路径上是断的。
-            lines.append(f"采集时间：{collected_at}")
-        from .ocr_layout import redact_pii_text as _red
-        text, n_red = _red("\n".join(lines))
-        return {
-            "text": text, "engine": "vision",
-            "rotation": 0, "layout": "single", "n_redacted": n_red,
-        }
+        logger.warning("[OCR] RapidOCR 也失败 (%s)", e)
 
     return {"text": "", "engine": "none", "rotation": 0, "layout": "single", "n_redacted": 0}
 
@@ -1503,7 +1504,7 @@ def _ai_vision_ocr_extract(image_b64: str) -> list:
             headers=headers,
             method="POST",
         )
-        with urllib.request.urlopen(req, timeout=15) as resp:
+        with urllib.request.urlopen(req, timeout=30) as resp:
             res_data = json.loads(resp.read().decode("utf-8"))
             txt = res_data["content"][0]["text"].strip()
             txt = re.sub(r"^```[a-z]*\s*", "", txt, flags=re.MULTILINE)
