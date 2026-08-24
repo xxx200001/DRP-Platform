@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import os
 import argparse
 import logging
 import sys
@@ -18,6 +19,17 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+# 自动加载项目根目录 .env 环境变量（注入 API 密钥、模型配置等）
+_env_file = Path(__file__).resolve().parent / ".env"
+if _env_file.exists():
+    for _line in _env_file.read_text(encoding="utf-8", errors="ignore").splitlines():
+        _line = _line.strip()
+        if _line and not _line.startswith("#") and "=" in _line:
+            _k, _v = _line.split("=", 1)
+            _k, _v = _k.strip(), _v.strip()
+            if _k and _k not in os.environ:
+                os.environ[_k] = _v
 
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",

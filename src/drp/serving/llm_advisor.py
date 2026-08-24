@@ -20,7 +20,19 @@ import json
 import logging
 import os
 import urllib.request
+from pathlib import Path
 from typing import Any
+
+# 自动加载项目根目录 .env 环境变量
+_root_env = Path(__file__).resolve().parents[3] / ".env"
+if _root_env.exists():
+    for _line in _root_env.read_text(encoding="utf-8", errors="ignore").splitlines():
+        _line = _line.strip()
+        if _line and not _line.startswith("#") and "=" in _line:
+            _k, _v = _line.split("=", 1)
+            _k, _v = _k.strip(), _v.strip()
+            if _k and _k not in os.environ:
+                os.environ[_k] = _v
 
 from .compliance import is_compliant
 
