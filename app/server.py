@@ -1099,8 +1099,8 @@ def build_server(app_data: str | Path):
             **st.model_card,
         }
 
-        # V3.2：根据总览首要关注系统动态设定预测标签
-        # 不再固定显示"综合心血管代谢"，而是匹配实际异常
+        # V3.2/V3.3：根据总览首要关注系统与用户关注点动态设定预测标签
+        # 彻底告别写死心血管，精确匹配实际异常系统或关注点
         _ENDPOINT_LABELS = {
             "肝功能": "肝功能相关疾病风险进展",
             "血脂": "血脂异常及心脑血管疾病风险进展",
@@ -1109,18 +1109,46 @@ def build_server(app_data: str | Path):
             "血压": "高血压及靶器官损害风险进展",
             "电解质": "电解质紊乱相关风险进展",
             "血常规": "血液系统异常相关风险进展",
+            "心肌酶谱": "心肌酶及心血管功能相关风险进展",
+            "消化酶谱": "消化系统酶学及胰腺风险进展",
+            "免疫指标": "免疫系统及代谢炎症风险进展",
             "炎症指标": "慢性炎症及代谢疾病风险进展",
             "体重管理": "代谢综合征相关风险进展",
         }
+        _CONCERN_TO_ENDPOINT = {
+            "liver": "肝功能相关疾病风险进展",
+            "cardio": "血脂异常及心脑血管疾病风险进展",
+            "glucose": "血糖代谢及糖尿病相关风险进展",
+            "renal": "肾功能相关疾病风险进展",
+        }
+
+        target_label = None
+        target_detail = None
+
         if overview_items:
+            # 1. 优先以实际异常最严重的系统为预测目标
             top_group = overview_items[0]["group"]
-            dynamic_label = _ENDPOINT_LABELS.get(top_group)
-            if dynamic_label:
-                prediction_context["endpoint_label"] = dynamic_label
-                prediction_context["endpoint_detail"] = (
-                    f"基于本次检查，首要关注系统为「{top_group}」。"
-                    f"模型以综合慢病为基础训练，此处概率已按{top_group}方向解读。"
-                )
+            target_label = _ENDPOINT_LABELS.get(top_group, f"{top_group}相关疾病风险进展")
+            target_detail = (
+                f"基于本次检查，首要异常系统为「{top_group}」（共 {len(overview_items[0]['indicators'])} 项偏离参考区间）。"
+                f"模型已按{top_group}风险发展方向进行重点评估与解读。"
+            )
+        elif concern in _CONCERN_TO_ENDPOINT:
+            # 2. 无明显异常但用户有明确关注点
+            c_name = _CONCERN_LABEL.get(concern, concern)
+            target_label = _CONCERN_TO_ENDPOINT[concern]
+            target_detail = (
+                f"本次体检「{c_name}」相关指标均在参考区间内，模型评估该系统风险处于平稳低位。"
+            )
+        else:
+            # 3. 全身指标均平稳
+            target_label = "全身多系统健康平稳进展"
+            target_detail = (
+                "本次体检全部入库指标均在参考区间内，多系统慢性疾病发生概率处于低危平稳状态。"
+            )
+
+        prediction_context["endpoint_label"] = target_label
+        prediction_context["endpoint_detail"] = target_detail
 
         # -------- V3.2：分系统风险评估（基于真实指标异常） --------
         # 从 overview_items 里提取每个系统的异常程度，生成分系统风险等级
