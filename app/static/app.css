@@ -842,3 +842,32 @@ details.fold > summary:hover { color: var(--ink); }
 }
 .nextstep b { color: var(--t1); }
 .nextstep .tb-ops { margin-left: auto; display: flex; gap: 8px; }
+
+/* ===================== V3.2 分系统风险评估 ===================== */
+.sys-risk-title { font-size: 15px; font-weight: 600; margin-bottom: 12px; }
+.sys-risk-title .muted { font-weight: 400; font-size: 12px; margin-left: 6px; }
+.sys-risk-grid { display: flex; flex-direction: column; gap: 10px; }
+.sys-risk-card {
+  padding: 12px 14px; border-radius: var(--radius-sm);
+  transition: box-shadow .2s;
+}
+.sys-risk-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+.sys-risk-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.sys-risk-head b { font-size: 14px; }
+.sys-icon { font-size: 16px; font-weight: 700; }
+.sys-level { font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 10px; background: rgba(255,255,255,.6); }
+.sys-dept { font-size: 11px; color: var(--ink-3); margin-left: auto; }
+.sys-bar { height: 4px; background: #eee; border-radius: 2px; margin: 8px 0 6px; overflow: hidden; }
+.sys-bar i { display: block; height: 100%; border-radius: 2px; transition: width .4s ease; }
+.sys-inds { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12px; color: var(--ink-2); margin-top: 4px; }
+.sys-ind b { font-weight: 600; }
+.sys-ind .worse { color: #f5222d; font-size: 11px; font-style: normal; font-weight: 600; }
+.sys-dir { font-size: 11px; color: var(--ink-3); margin-top: 6px; padding: 4px 8px; background: rgba(0,0,0,.03); border-radius: 4px; }
+.sys-stable { margin-top: 10px; font-size: 13px; color: #52c41a; padding: 8px 12px; background: #f6ffed; border-radius: var(--radius-sm); }
+.ai-narrative {
+  margin-top: 14px; padding: 14px 16px;
+  background: linear-gradient(135deg, #f0f7ff, #f8f0ff);
+  border: 1px solid #d6e4ff; border-radius: var(--radius-sm);
+}
+.ai-narrative-title { font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--ink-1); }
+.ai-narrative p { font-size: 13px; line-height: 1.8; color: var(--ink-2); margin: 0; }

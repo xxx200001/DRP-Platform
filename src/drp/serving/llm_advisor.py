@@ -70,6 +70,7 @@ def _call_anthropic(
         "x-api-key": api_key,
         "anthropic-version": "2023-06-01",
         "Content-Type": "application/json",
+        "User-Agent": "SoulHealth-DRP/3.2",
     }
     payload = {
         "model": model,

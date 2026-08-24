@@ -999,6 +999,9 @@ function renderPredict(r) {
 
   renderOverview(r);
 
+  // V3.2：分系统风险评估 + AI 综合解读
+  renderSystemRisks(r);
+
   $("#endpointLabel").innerHTML =
     `预测目标：<b>${esc(ctx.endpoint_label || "综合健康风险进展")}</b>` +
     (ctx.endpoint_detail ? `<span class="muted" style="display:block;margin-top:2px">${esc(ctx.endpoint_detail)}</span>` : "");
@@ -1017,6 +1020,69 @@ function renderPredict(r) {
 
   renderReferral(r.referral);
   $("#monotonicNote").textContent = r.monotonic_note || "";
+}
+
+/* V3.2: 分系统风险卡片 + AI 综合叙述 */
+function renderSystemRisks(r) {
+  const box = $("#systemRisksBox");
+  if (!box) return;
+  const risks = r.system_risks || [];
+  const narrative = r.ai_risk_narrative || "";
+
+  if (!risks.length && !narrative) { box.hidden = true; return; }
+  box.hidden = false;
+
+  const LEVEL_COLORS = ["#52c41a", "#faad14", "#fa8c16", "#f5222d", "#a8071a"];
+  const LEVEL_BG = ["#f6ffed", "#fffbe6", "#fff7e6", "#fff1f0", "#fff1f0"];
+  const LEVEL_ICONS = ["✓", "◐", "▲", "▲", "✕"];
+
+  // 按 level 降序（最严重的在前），正常的放最后
+  const sorted = [...risks].sort((a, b) => b.level - a.level);
+  const abnormal = sorted.filter(x => x.level > 0);
+  const normal = sorted.filter(x => x.level === 0);
+
+  let html = `<div class="sys-risk-title">🔬 分系统健康评估<span class="muted">（基于本次检查真实指标）</span></div>`;
+
+  if (abnormal.length) {
+    html += `<div class="sys-risk-grid">`;
+    for (const sr of abnormal) {
+      const color = LEVEL_COLORS[sr.level] || "#999";
+      const bg = LEVEL_BG[sr.level] || "#fafafa";
+      const icon = LEVEL_ICONS[sr.level] || "—";
+      const barW = Math.min(sr.level * 25, 100);
+      const indHtml = (sr.indicators || []).map(ind =>
+        `<span class="sys-ind">${esc(ind.name_cn)} <b>${ind.value}</b>${esc(ind.unit||"")}` +
+        (ind.worsened ? ` <em class="worse">↑恶化</em>` : "") + `</span>`
+      ).join("");
+      html += `
+        <div class="sys-risk-card" style="border-left:3px solid ${color};background:${bg}">
+          <div class="sys-risk-head">
+            <span class="sys-icon" style="color:${color}">${icon}</span>
+            <b>${esc(sr.system)}</b>
+            <span class="sys-level" style="color:${color}">${esc(sr.level_label)}</span>
+            ${sr.department ? `<span class="sys-dept">→ ${esc(sr.department)}</span>` : ""}
+          </div>
+          <div class="sys-bar"><i style="width:${barW}%;background:${color}"></i></div>
+          ${indHtml ? `<div class="sys-inds">${indHtml}</div>` : ""}
+          ${sr.direction ? `<div class="sys-dir">⚠ 若未干预：${esc(sr.direction)}</div>` : ""}
+        </div>`;
+    }
+    html += `</div>`;
+  }
+
+  if (normal.length) {
+    html += `<div class="sys-stable">✓ 稳定系统：${normal.map(x => esc(x.system)).join("、")}</div>`;
+  }
+
+  // AI 综合叙述
+  if (narrative) {
+    html += `<div class="ai-narrative">
+      <div class="ai-narrative-title">🤖 AI 综合风险解读</div>
+      <p>${esc(narrative)}</p>
+    </div>`;
+  }
+
+  box.innerHTML = html;
 }
 
 function renderFactors(main) {

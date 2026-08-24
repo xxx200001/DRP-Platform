@@ -1088,6 +1088,105 @@ def build_server(app_data: str | Path):
             **st.model_card,
         }
 
+        # -------- V3.2：分系统风险评估（基于真实指标异常） --------
+        # 从 overview_items 里提取每个系统的异常程度，生成分系统风险等级
+        _SYSTEM_RISK_LEVELS = {
+            0: "正常", 1: "轻度偏离", 2: "中度异常", 3: "明显异常", 4: "严重异常",
+        }
+        system_risks = []
+        for ov in overview_items:
+            grades = [abs(ind.get("grade", 0)) for ind in ov.get("indicators", [])]
+            max_grade = max(grades) if grades else 0
+            n_worse = sum(1 for ind in ov["indicators"] if ind.get("worsened"))
+            # 综合评级：最大分级 + 恶化趋势加权
+            effective = min(max_grade + (1 if n_worse > 0 else 0), 4)
+            system_risks.append({
+                "system": ov["group"],
+                "department": ov["department"],
+                "level": int(effective),
+                "level_label": _SYSTEM_RISK_LEVELS.get(effective, "未知"),
+                "n_abnormal": len(ov["indicators"]),
+                "n_worsened": n_worse,
+                "direction": ov.get("direction", ""),
+                "indicators": ov["indicators"][:5],  # 前5项
+            })
+        # 补充稳定系统
+        for sg in stable_groups:
+            system_risks.append({
+                "system": sg,
+                "department": "",
+                "level": 0,
+                "level_label": "正常",
+                "n_abnormal": 0,
+                "n_worsened": 0,
+                "direction": "",
+                "indicators": [],
+            })
+
+        # -------- V3.2：AI 综合风险叙述 --------
+        ai_risk_narrative = None
+        try:
+            from drp.serving.llm_advisor import _call_anthropic
+            api_key = os.environ.get(
+                "ANTHROPIC_API_KEY",
+                "sk-HcQuMphdXJMXangi05KHQ6cZLERVPzTLWAOTPYzMYshjisZu",
+            )
+            base_url = os.environ.get("ANTHROPIC_BASE_URL", "https://daodun.cc")
+            llm_model = os.environ.get("SOULHEALTH_LLM_MODEL", "claude-sonnet-4-6")
+
+            # 构建 prompt
+            abnormal_desc = []
+            for sr in system_risks:
+                if sr["level"] > 0:
+                    ind_strs = []
+                    for ind in sr["indicators"][:3]:
+                        g = ind.get("grade", 0)
+                        tag = "偏高" if g and g > 0 else "偏低" if g and g < 0 else ""
+                        ind_strs.append(f"{ind['name_cn']} {ind['value']}{ind.get('unit','')}{tag}")
+                    abnormal_desc.append(f"- {sr['system']}（{sr['level_label']}）：{', '.join(ind_strs)}")
+
+            model_prob = results[1]["probability"] if len(results) > 1 else results[0]["probability"]
+            model_tier = results[1]["risk_tier"] if len(results) > 1 else results[0]["risk_tier"]
+
+            prompt = (
+                f"患者信息：{patient.get('sex','未知')}，{patient.get('age','未知')}岁\n"
+                f"模型综合风险评估：未来3年综合慢病风险 {model_prob*100:.1f}%（{model_tier}）\n"
+                f"本次检查发现的系统异常：\n"
+                + "\n".join(abnormal_desc) +
+                f"\n稳定系统：{', '.join(stable_groups) if stable_groups else '无'}"
+                "\n\n请用 3-5 句话给出综合风险解读：\n"
+                "1. 指出最需要关注的系统及原因\n"
+                "2. 解释各系统之间的关联性（如肝功异常可能影响代谢等）\n"
+                "3. 给出简要的生活建议\n"
+                "语气要专业但通俗。不要分条，用自然段落。"
+            )
+            system_prompt = (
+                "你是一位有 20 年临床经验的全科医生。根据患者的化验报告异常指标，"
+                "给出综合、有逻辑的健康风险解读。注意：这是辅助参考，不是诊断结论。"
+            )
+            raw = _call_anthropic(api_key, base_url, llm_model, prompt, system_prompt, timeout=15.0)
+            if raw:
+                ai_risk_narrative = raw
+                logger.info("[Predict] AI 综合风险叙述生成成功 (%d 字)", len(raw))
+        except Exception as e:
+            logger.warning("[Predict] AI 综合风险叙述失败: %s", e)
+
+        # 如果 AI 不可用，用规则生成一段
+        if not ai_risk_narrative and overview_items:
+            top = overview_items[0]
+            parts = [
+                f"本次检查最需要关注的是{top['group']}方面，共有 {len(top['indicators'])} 项指标异常。"
+            ]
+            if top.get("direction"):
+                parts.append(f"若长期未干预，{top['direction']}。")
+            if len(overview_items) > 1:
+                others = "、".join(x["group"] for x in overview_items[1:])
+                parts.append(f"此外，{others}方面也有轻度偏离，建议定期监测。")
+            if stable_groups:
+                parts.append(f"{', '.join(stable_groups[:3])}等系统目前表现稳定。")
+            parts.append("建议在医生指导下进一步检查确认，并注意生活方式调整。")
+            ai_risk_narrative = "".join(parts)
+
         return {
             "patient_id": body.patient_id,
             "model_version": decision.version,
@@ -1103,6 +1202,8 @@ def build_server(app_data: str | Path):
             },
             "prediction_context": prediction_context,
             "referral": advice.to_dict(),
+            "system_risks": system_risks,
+            "ai_risk_narrative": ai_risk_narrative,
         }
 
     # ---------------- 趋势报告与 AI 大模型深度分析 ----------------
