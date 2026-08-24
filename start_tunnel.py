@@ -23,8 +23,6 @@ if hasattr(sys.stdout, "reconfigure"):
 if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
 
-PORT = 8000
-LOCAL_URL = f"http://127.0.0.1:{PORT}"
 ROOT_DIR = Path(__file__).resolve().parent
 
 
@@ -32,6 +30,10 @@ def is_port_open(port: int, host: str = "127.0.0.1") -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.settimeout(0.6)
         return s.connect_ex((host, port)) == 0
+
+
+PORT = 8001 if is_port_open(8001) else (8000 if is_port_open(8000) else 8001)
+LOCAL_URL = f"http://127.0.0.1:{PORT}"
 
 
 def find_cloudflared() -> str | None:
