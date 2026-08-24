@@ -288,6 +288,11 @@ class TrendIntervention:
     lifestyle_advice: tuple[str, ...]
     followup_cycle: str
     red_flags: tuple[str, ...]
+    # V3.3：逐指标的"数值化"明细句（值 + 超限倍数 + 较上次趋势），
+    # 与聚合统计 —— 前端"最需要关注的 N 个问题"从这里取真实数据组织文案，
+    # 不再使用模板套话。
+    details: tuple[str, ...] = ()
+    stats: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return {
@@ -299,135 +304,233 @@ class TrendIntervention:
             "lifestyle_advice": list(self.lifestyle_advice),
             "followup_cycle": self.followup_cycle,
             "red_flags": list(self.red_flags),
+            "details": list(self.details),
+            "stats": dict(self.stats),
         }
 
 
-def build_interventions(comparisons: list[IndicatorComparison]) -> list[TrendIntervention]:
-    """根据本次 vs 上次的恶化/异常指标，智能生成结构化改善办法与应对方案。"""
+# --- V3.3 数值化明细的构件 -------------------------------------------------
+#: 系统归组（干预建议口径）。ALP/DBIL 归肝胆——真实肝功能单常见项，
+#: 此前缺失会导致"ALP 103↑"这类异常在干预卡上凭空消失。
+_IV_SYSTEMS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    ("肝胆代谢防护", "🧪", ("ALT", "AST", "GGT", "ALP", "TBIL", "DBIL", "ALB")),
+    ("糖代谢与血糖调控", "🩸", ("GLU", "HBA1C", "INS")),
+    ("心血管与脂代谢管理", "🫀", ("TG", "TC", "LDLC", "HDLC", "SBP", "DBP", "BMI")),
+    ("肾脏机能与尿酸排泄", "💧", ("UA", "CREA", "UREA", "UACR")),
+)
+
+
+def _over_text(value: float, ref_low, ref_high, grade: int) -> str:
+    """把偏离量说成人话：超上限 1.8 倍 / 低于下限 25%。算不出就返回空。"""
+    try:
+        if grade > 0 and ref_high not in (None, 0):
+            k = value / float(ref_high)
+            if k > 1.005:
+                txt = f"{k:.1f}"
+                return "略超上限" if txt == "1.0" else f"达上限的 {txt} 倍"
+        if grade < 0 and ref_low not in (None, 0):
+            pct = (float(ref_low) - value) / abs(float(ref_low)) * 100
+            if pct > 0.5:
+                return f"低于下限约 {pct:.0f}%"
+    except (TypeError, ZeroDivisionError, ValueError):
+        pass
+    return ""
+
+
+def _entry_detail(e: dict, comp: IndicatorComparison | None) -> str:
+    """单指标明细句：名称 值单位 · 偏离程度 · 较上次趋势。全部来自真实数据。"""
+    bits = [f"{e['name_cn']} {e['value']:g}{e.get('unit') or ''}"]
+    over = _over_text(e["value"], e.get("ref_low"), e.get("ref_high"), e.get("grade", 0))
+    if over:
+        bits.append(over)
+    if comp is not None:
+        if comp.is_real_change:
+            pct = f"{comp.delta_pct:+.0%}" if comp.delta_pct is not None else ""
+            bits.append(f"较上次{comp.direction}{pct}" + ("·加重" if comp.worsened else ""))
+        else:
+            bits.append("较上次平稳")
+    else:
+        bits.append("首次记录")
+    return " · ".join(bits)
+
+
+def build_interventions(
+    comparisons: list[IndicatorComparison],
+    snapshot: list[dict] | None = None,
+) -> list[TrendIntervention]:
+    """
+    根据【最新一次各指标真实取值】+【本次 vs 上次真实变化】动态生成干预方案。
+
+    V3.3 修复的两个"假动态"问题：
+      1. 旧版只看 comparisons（要求同指标 ≥2 次观测）——患者首份报告里的
+         ALT 112↑ 会被完全忽略，干预卡退化成兜底套话。现以 snapshot
+         （每指标最新值+分级+参考界）为主判据，comparisons 只补充趋势信息。
+      2. 建议条目与随访周期不再是整段固定文案：逐条按实际异常的指标拼装，
+         并把真实数值/超限倍数写进句子里，不同化验单必然得到不同输出。
+    snapshot 为空时退回旧行为（由 comparisons 推断），保持向后兼容。
+    """
+    comp_map = {c.code: c for c in comparisons}
+
+    # 统一成 {code: entry} 的"最新异常"视图
+    entries: dict[str, dict] = {}
+    if snapshot:
+        for e in snapshot:
+            if e.get("grade") and e.get("value") is not None:
+                entries[e["code"]] = dict(e)
+    else:  # 兼容旧调用：从 comparisons 还原
+        for c in comparisons:
+            if c.curr_grade != 0 or c.is_real_change:
+                entries[c.code] = {
+                    "code": c.code, "name_cn": c.name_cn, "unit": c.unit,
+                    "value": c.curr_value, "grade": c.curr_grade,
+                    "ref_low": None, "ref_high": None,
+                }
+
     out: list[TrendIntervention] = []
 
-    # 按系统对异常/恶化指标进行归类
-    abnormal_map = {c.code: c for c in comparisons if c.curr_grade != 0 or c.is_real_change}
+    for system, icon, codes in _IV_SYSTEMS:
+        hit = [entries[c] for c in codes if c in entries]
+        if not hit:
+            continue
+        hit.sort(key=lambda e: -abs(e.get("grade", 0)))
+        comp_of = {e["code"]: comp_map.get(e["code"]) for e in hit}
+        worsened_n = sum(1 for e in hit
+                         if comp_of[e["code"]] is not None and comp_of[e["code"]].worsened)
+        max_grade = max(abs(e.get("grade", 0)) for e in hit)
+        level = "重点关注" if (worsened_n or max_grade >= 3) else "积极改善"
+        targets = tuple(f"{e['name_cn']} ({e['value']:g}{e.get('unit') or ''})" for e in hit)
+        details = tuple(_entry_detail(e, comp_of[e["code"]]) for e in hit)
+        worst = hit[0]
+        stats = {
+            "n_abnormal": len(hit),
+            "n_worsened": int(worsened_n),
+            "max_grade": int(max_grade),
+            "worst": {
+                "name_cn": worst["name_cn"], "value": worst["value"],
+                "unit": worst.get("unit") or "",
+                "over": _over_text(worst["value"], worst.get("ref_low"),
+                                   worst.get("ref_high"), worst.get("grade", 0)),
+            },
+        }
+        has = lambda *cs: any(c in entries for c in cs)  # noqa: E731
+        v = lambda c: entries[c]["value"]  # noqa: E731
 
-    # 1. 肝胆系统
-    liver_codes = [c for c in ("ALT", "AST", "GGT", "TBIL", "ALB") if c in abnormal_map]
-    if liver_codes:
-        worsened = any(abnormal_map[c].worsened for c in liver_codes)
-        targets = tuple(f"{abnormal_map[c].name_cn} ({abnormal_map[c].curr_value:g}{abnormal_map[c].unit})" for c in liver_codes)
+        diet: list[str] = []
+        life: list[str] = []
+        flags: list[str] = []
+        cycle = ""
+
+        if system == "肝胆代谢防护":
+            if has("GGT"):
+                diet.append(
+                    f"γ-谷氨酰转移酶 {v('GGT'):g} 对酒精与油腻负担最敏感——严格戒酒"
+                    "（含啤酒、红酒与含酒精饮料），给肝细胞减负")
+            else:
+                diet.append("严格戒酒，避免酒精对肝实质细胞的持续刺激与代谢负担")
+            if has("ALT", "AST"):
+                worst_tx = entries.get("ALT") or entries.get("AST")
+                diet.append(
+                    f"{worst_tx['name_cn']}已达 {worst_tx['value']:g}{worst_tx.get('unit') or ''}，"
+                    "减少油炸食品与高果糖浆（奶茶/含糖饮料）摄入，每日烹调油控制在 25g 以内")
+            if has("ALP", "TBIL", "DBIL"):
+                diet.append("碱性磷酸酶/胆红素相关指标偏离时饮食宜清淡规律，避免暴食油腻，减轻胆汁排泄负担")
+            diet.append("适量优质蛋白（清蒸鱼、脱脂奶、豆腐）与深色蔬菜，为肝细胞修复提供底物")
+            life.append("保持规律作息，23 点前入睡、保证 7~8 小时睡眠，避免熬夜加重肝脏代谢负担")
+            life.append("审慎对待未经医生评估的保健品与偏方，避免额外肝毒性负担")
+            if has("ALT", "AST", "GGT"):
+                life.append("坚持每周 ≥150 分钟中等强度有氧运动，帮助减少肝内脂肪蓄积")
+            cycle = (f"建议 {'2~4 周' if level == '重点关注' else '1~2 个月'}内复查肝功能全套"
+                     f"（重点跟踪 {worst['name_cn']}）及肝胆胰脾超声")
+            flags.append("若出现皮肤或巩膜发黄、尿色深如浓茶、持续右上腹胀痛或明显乏力厌油，请及时就诊消化内科")
+
+        elif system == "糖代谢与血糖调控":
+            if has("GLU"):
+                diet.append(
+                    f"本次空腹血糖 {v('GLU'):g} mmol/L——控制每餐碳水总量，"
+                    "以燕麦、糙米、杂豆等低 GI 粗杂粮替代 1/3~1/2 精制米面")
+            if has("HBA1C"):
+                diet.append(
+                    f"糖化血红蛋白 {v('HBA1C'):g}% 反映近 3 个月平均血糖——"
+                    "杜绝含糖饮料与高糖零食，比单日控糖更重要的是长期稳定")
+            diet.append("进餐顺序：先清汤和蔬菜、再蛋白质、最后主食，可平稳餐后血糖波动")
+            life.append("餐后 30 分钟进行 15~20 分钟轻中度活动（快走、轻家务），避免餐后立即久坐")
+            life.append("每周累计 ≥150 分钟规律有氧运动 + 2 次抗阻力量锻炼，提升肌肉对葡萄糖的摄取")
+            life.append("可配置家用血糖仪，记录空腹与餐后 2 小时血糖，复诊时供医生参考")
+            cycle = f"建议 {'1 个月' if level == '重点关注' else '1~3 个月'}内复查空腹静脉血糖与糖化血红蛋白 (HbA1c)"
+            flags.append("若出现多饮、多尿、多食伴体重快速下降，或视物模糊、手足麻木，请及时就诊内分泌科")
+
+        elif system == "心血管与脂代谢管理":
+            if has("TG"):
+                diet.append(
+                    f"甘油三酯 {v('TG'):g} mmol/L 对糖和酒精最敏感——严格限制甜食、"
+                    "含糖饮料与酒精，它们在肝脏会直接转化为甘油三酯")
+            if has("LDLC", "TC"):
+                e2 = entries.get("LDLC") or entries.get("TC")
+                diet.append(
+                    f"{e2['name_cn']} {e2['value']:g} mmol/L——限制动物内脏、肥肉、黄油"
+                    "及含反式脂肪的加工起酥食品，换用橄榄油/茶籽油")
+            diet.append("每周 2~3 次深海鱼（三文鱼、鲭鱼）补充 Omega-3，主食中加入燕麦等可溶性膳食纤维")
+            if has("SBP", "DBP"):
+                e3 = entries.get("SBP") or entries.get("DBP")
+                diet.append(f"{e3['name_cn']}达 {e3['value']:g} mmHg——每日食盐控制在 5 克以内（约一平啤酒瓶盖）")
+                life.append("每天早晚各测一次静息血压并记录，就诊时带上血压日记")
+            if has("HDLC") and entries["HDLC"].get("grade", 0) < 0:
+                life.append(
+                    f"高密度脂蛋白 {v('HDLC'):g} mmol/L 偏低——规律有氧运动是提升"
+                    "「好胆固醇」最有效的非药物手段，每周 ≥150 分钟")
+            if has("BMI"):
+                life.append(
+                    f"BMI {v('BMI'):g}——以每月减重 1~2 公斤为节奏循序渐进，"
+                    "优先减少腰腹脂肪（配合抗阻训练防止肌肉流失）")
+            life.append("戒烟并远离二手烟，避免剧烈情绪波动与骤冷骤热刺激")
+            cycle = f"建议 {'1 个月' if level == '重点关注' else '1~3 个月'}内复查血脂四项（重点跟踪 {worst['name_cn']}）"
+            if has("SBP", "DBP"):
+                cycle += "，并做动态血压监测"
+            flags.append("若突发持续胸闷、心前区压榨性疼痛、呼吸困难或一侧肢体麻木无力，请立即拨打急救电话就近就诊")
+
+        elif system == "肾脏机能与尿酸排泄":
+            if has("UA"):
+                diet.append(
+                    f"血尿酸 {v('UA'):g} μmol/L——严格限制高嘌呤食物"
+                    "（动物内脏、浓肉汤/火锅汤底、贝类海鲜及啤酒）")
+                life.append("避免暴饮暴食、剧烈无氧运动后脱水、关节受凉等急性痛风诱发因素")
+            diet.append("每日饮水 2000~2500 mL 并分次均匀摄入，促进代谢废物经肾排出")
+            if has("CREA", "UREA"):
+                e4 = entries.get("CREA") or entries.get("UREA")
+                diet.append(f"{e4['name_cn']} {e4['value']:g}{e4.get('unit') or ''}——蛋白质摄入以适量优质蛋白为主，避免长期高蛋白饮食加重肾小球滤过负担")
+            life.append("慎重对待具有潜在肾毒性的止痛类产品，使用前先咨询医生")
+            cycle = f"建议 {'1 个月' if level == '重点关注' else '1~2 个月'}内复查肾功能（{ '、'.join(x['name_cn'] for x in hit[:3]) }）与晨尿常规"
+            flags.append("若出现关节急性红肿热痛、眼睑或下肢浮肿、尿中泡沫经久不散，请及时就诊肾内科")
+
         out.append(
             TrendIntervention(
-                system="肝胆代谢防护",
-                icon="🧪",
-                level="重点关注" if worsened else "积极改善",
+                system=system, icon=icon, level=level,
                 target_indicators=targets,
-                diet_advice=(
-                    "严格戒酒，避免酒精对肝实质细胞的持续刺激与代谢负担",
-                    "减少高脂、油炸食品及高果糖浆摄入，控制每日烹调油用量在 25g 以内",
-                    "适量摄入优质蛋白质（如清蒸深海鱼、脱脂奶、豆腐）与富含抗氧化物质的深色蔬菜",
-                ),
-                lifestyle_advice=(
-                    "保持规律作息，避免熬夜与过度劳累，保证夜间 7~8 小时高质量睡眠",
-                    "审慎使用未经医生评估的保健品、偏方或潜在肝毒性非处方药物",
-                    "坚持中等强度有氧运动以辅助改善脂肪蓄积",
-                ),
-                followup_cycle="建议 2~4 周或 1~2 个月内复查肝功能全套及肝胆胰脾超声",
-                red_flags=(
-                    "若出现皮肤或巩膜发黄、持续右上腹胀痛、明显乏力厌油，请及时前往消化内科就诊",
-                ),
+                diet_advice=tuple(diet[:4]),
+                lifestyle_advice=tuple(life[:4]),
+                followup_cycle=cycle,
+                red_flags=tuple(flags),
+                details=details,
+                stats=stats,
             )
         )
 
-    # 2. 血糖与糖代谢
-    glu_codes = [c for c in ("GLU", "HBA1C", "INS") if c in abnormal_map]
-    if glu_codes:
-        worsened = any(abnormal_map[c].worsened for c in glu_codes)
-        targets = tuple(f"{abnormal_map[c].name_cn} ({abnormal_map[c].curr_value:g}{abnormal_map[c].unit})" for c in glu_codes)
-        out.append(
-            TrendIntervention(
-                system="糖代谢与血糖调控",
-                icon="🩸",
-                level="重点关注" if worsened else "积极改善",
-                target_indicators=targets,
-                diet_advice=(
-                    "控制每餐碳水化合物总量，采用燕麦、糙米、杂豆等低 GI 粗杂粮替代 1/3~1/2 精制米面",
-                    "进餐顺序建议先喝清汤、吃蔬菜、再吃蛋白质，最后吃主食，以平稳餐后血糖波动",
-                    "杜绝含糖饮料、糕点与高糖零食，两餐之间如有饥饿感可适量食用低糖黄瓜、番茄",
-                ),
-                lifestyle_advice=(
-                    "坚持餐后 30 分钟进行 15~20 分钟轻中度活动（如快走、做轻家务），避免餐后立即久坐",
-                    "每周累计完成 150 分钟以上规律有氧运动与 2 次抗阻力量锻炼",
-                    "建议配置家用血糖仪，定期监测并记录空腹与三餐后 2 小时血糖水平",
-                ),
-                followup_cycle="建议 1~3 个月内复查糖化血红蛋白 (HbA1c) 与空腹静脉血糖",
-                red_flags=(
-                    "若出现多饮、多尿、多食伴体重快速下降，或视物模糊、手足麻木，请及时就诊内分泌科",
-                ),
-            )
-        )
+    # 排序：重点关注在前；同级先看"是否在恶化"，再看最大分级、异常项数 ——
+    # 与 llm_advisor 的系统排序保持同一口径。
+    out.sort(key=lambda iv: (0 if iv.level == "重点关注" else 1,
+                             -iv.stats.get("n_worsened", 0),
+                             -iv.stats.get("max_grade", 0),
+                             -iv.stats.get("n_abnormal", 0)))
 
-    # 3. 血脂与心血管代谢
-    lipid_codes = [c for c in ("TG", "TC", "LDLC", "HDLC", "SBP", "DBP", "BMI") if c in abnormal_map]
-    if lipid_codes:
-        worsened = any(abnormal_map[c].worsened for c in lipid_codes)
-        targets = tuple(f"{abnormal_map[c].name_cn} ({abnormal_map[c].curr_value:g}{abnormal_map[c].unit})" for c in lipid_codes)
-        out.append(
-            TrendIntervention(
-                system="心血管与脂代谢管理",
-                icon="🫀",
-                level="重点关注" if worsened else "积极改善",
-                target_indicators=targets,
-                diet_advice=(
-                    "践行低盐低脂的地中海饮食结构，每日食盐摄入控制在 5 克以内（约一平啤酒瓶盖）",
-                    "限制动物内脏、肥肉、黄油、椰子油及含反式脂肪酸的加工起酥食品",
-                    "增加富含 Omega-3 脂肪酸的深海鱼类（三文鱼、鲭鱼）与燕麦等可溶性膳食纤维",
-                ),
-                lifestyle_advice=(
-                    "超重或腰围超标者建议以每月减重 1~2 公斤为目标循序渐进改善体成分",
-                    "戒烟并远离二手烟，限制饮酒，避免剧烈情绪波动与剧烈温差刺激",
-                    "每天早晨起床后及晚间就寝前各测量一次静息血压并做好日记",
-                ),
-                followup_cycle="建议 1~3 个月复查血脂四项、同型半胱氨酸及动态血压",
-                red_flags=(
-                    "若突发持续胸闷、心前区压榨性疼痛、呼吸困难或头晕肢麻，请立即前往医院急诊就诊",
-                ),
-            )
-        )
-
-    # 4. 肾功能与尿酸代谢
-    renal_codes = [c for c in ("UA", "CREA", "UREA", "UACR") if c in abnormal_map]
-    if renal_codes:
-        worsened = any(abnormal_map[c].worsened for c in renal_codes)
-        targets = tuple(f"{abnormal_map[c].name_cn} ({abnormal_map[c].curr_value:g}{abnormal_map[c].unit})" for c in renal_codes)
-        out.append(
-            TrendIntervention(
-                system="肾脏机能与尿酸排泄",
-                icon="💧",
-                level="重点关注" if worsened else "积极改善",
-                target_indicators=targets,
-                diet_advice=(
-                    "严格限制高嘌呤食物摄入（动物内脏、浓肉汤/火锅汤、海鲜贝类及啤酒）",
-                    "保证充足饮水，每日饮水量保持在 2000~2500 mL，分次饮用以促进尿酸溶解排泄",
-                    "多摄入新鲜碱性蔬菜，适量饮用苏打水或低脂奶制品",
-                ),
-                lifestyle_advice=(
-                    "避免暴饮暴食、剧烈无氧运动脱水或关节局部受凉等急性痛风诱发因素",
-                    "避免非必要使用肾毒性非甾体抗炎药，注意保护肾小球滤过功能",
-                ),
-                followup_cycle="建议 1~2 个月复查血尿酸、血肌酐、尿素氮与晨尿常规",
-                red_flags=(
-                    "若出现单侧大脚趾或踝关节急性红肿热痛剧烈发作，或眼睑下肢浮肿、泡沫尿，请及时就诊肾内科或风湿免疫科",
-                ),
-            )
-        )
-
-    # 5. 兜底通用健康维持方案
+    # 兜底：确实全部平稳时的通用维持方案（唯一允许的"无个体参数"卡片）
     if not out:
+        n_ok = len(snapshot) if snapshot else len(comparisons)
         out.append(
             TrendIntervention(
                 system="整体健康维持与预防保健",
                 icon="🌿",
                 level="平稳维持",
-                target_indicators=("各项监测指标总体处于平稳参考区间",),
+                target_indicators=(f"本次 {n_ok} 项监测指标均处于参考区间内",),
                 diet_advice=(
                     "保持食物多样化，荤素搭配，多食新鲜蔬果与全谷物粗杂粮",
                     "饮食清淡少油少盐，规律进餐，避免暴饮暴食",
@@ -437,9 +540,9 @@ def build_interventions(comparisons: list[IndicatorComparison]) -> list[TrendInt
                     "保持心态平衡，劳逸结合，养成良好的睡眠生物钟",
                 ),
                 followup_cycle="建议每 6~12 个月进行一次常规健康体检与指标跟踪",
-                red_flags=(
-                    "日常如遇身体明显不适，请随时前往医疗机构进行咨询与检查",
-                ),
+                red_flags=("日常如遇身体明显不适，请随时前往医疗机构进行咨询与检查",),
+                details=(f"{n_ok} 项指标全部在参考区间内",),
+                stats={"n_abnormal": 0, "n_worsened": 0, "max_grade": 0},
             )
         )
 
@@ -457,6 +560,10 @@ class TrendReport:
     change_attribution: ChangeAttribution | None = None
     interventions: list[TrendIntervention] = field(default_factory=list)
     rendered_text: str = ""
+    # V3.3：每个指标【最新一次】取值 + 分级 + 参考界（含只有一次观测的指标）。
+    # 干预建议与 AI 分析都从这里取"当前到底哪几项异常、偏离多少"，
+    # 不再依赖需要 ≥2 次观测的 comparisons —— 首份报告也能得到针对性输出。
+    latest_snapshot: list[dict] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -467,6 +574,7 @@ class TrendReport:
             if self.change_attribution else None,
             "interventions": [it.to_dict() for it in self.interventions],
             "rendered_text": self.rendered_text,
+            "latest_snapshot": list(self.latest_snapshot),
         }
 
 
@@ -491,6 +599,25 @@ def build_trend_report(
     comparisons = engine.compare_latest(cleaned, demographics)
     series = engine.recent_series(cleaned, n=recent_n, demographics=demographics)
 
+    # V3.3：最新快照（含仅一次观测的指标）。参考界按该患者性别年龄匹配，
+    # 供干预建议与 AI 分析计算"超上限几倍"这类真实数值化表述。
+    sex, age = extract_demographics(cleaned, demographics)
+    latest_snapshot: list[dict] = []
+    for s in series:
+        if not s.points:
+            continue
+        at, value, grade = s.points[-1]
+        meta = engine.registry.get(s.code)
+        iv = meta.match_interval(sex, age) if meta is not None else None
+        latest_snapshot.append({
+            "code": s.code, "name_cn": s.name_cn, "unit": s.unit,
+            "value": float(value), "grade": int(grade), "at": str(at)[:10],
+            "ref_low": iv.lower if iv is not None else None,
+            "ref_high": iv.upper if iv is not None else None,
+            "n_points": len(s.points),
+        })
+    latest_snapshot.sort(key=lambda e: -abs(e["grade"]))
+
     trajectories: dict[str, RiskTrajectory] = {}
     if audit is not None and pseudo_id:
         for h in horizons:
@@ -502,7 +629,7 @@ def build_trend_report(
     if prev_attribution is not None and curr_attribution is not None:
         change_attr = explain_change(prev_attribution, curr_attribution, top_n=risk_change_top_n)
 
-    interventions = build_interventions(comparisons)
+    interventions = build_interventions(comparisons, snapshot=latest_snapshot)
 
     report = TrendReport(
         comparisons=comparisons,
@@ -510,6 +637,7 @@ def build_trend_report(
         risk_trajectories=trajectories,
         change_attribution=change_attr,
         interventions=interventions,
+        latest_snapshot=latest_snapshot,
     )
     report.rendered_text = render_trend_text(report)
     return report

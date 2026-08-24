@@ -1,5 +1,5 @@
 /* =====================================================================
-   病情预测平台 · 前端逻辑 v2（零构建、零 CDN：echarts 已本地化）
+   病情预测平台 · 前端逻辑 v3.3（零构建、零 CDN：echarts 已本地化）
    ---------------------------------------------------------------------
    信息层级只有一条主线：选患者 → 录化验单 → 跑预测 → 看归因 → 回流随访。
    页面按这条主线切成四个目的地，而不是把所有面板铺在一屏里。
@@ -206,6 +206,8 @@ async function selectPatient(pid, jump) {
   $("#predictOut").hidden = true;
   $("#sec-factors").hidden = true;
   $("#sec-referral").hidden = true;
+  const nx = $("#sec-next"); if (nx) nx.hidden = true;
+  const mr = $("#miniRiskWrap"); if (mr) mr.hidden = true;
   $("#parseOut").hidden = true;
   $("#autoCompareBox").hidden = true;
   renderFollowupPlain();
@@ -872,6 +874,8 @@ async function doPredict({ fromAuto = false } = {}) {
     renderPredict(r);
     state.predicted = true;
     state.riskTimeline = null;
+    renderMiniRisk().catch(() => {});   // ③ 内嵌风险走势：患者不进趋势页也能看到轨迹
+    $("#predictOut").scrollIntoView({ behavior: "smooth", block: "start" });
     await loadTraces();
     await refreshPatients();
     state.patient = state.patients.find((p) => p.patient_id === state.pid);
@@ -985,6 +989,8 @@ function selectHorizon(h) {
     `当前展示：未来 ${hCn}窗口的指标贡献（点击上方时间窗口可切换）`;
   renderFactors(main);
   $("#narrative").textContent = main.narrative;
+  // 时间窗口切换时，③ 内嵌的风险走势跟着切到同一时程
+  if (state.riskTimeline && !$("#miniRiskWrap")?.hidden) renderMiniRisk().catch(() => {});
 }
 
 function renderPredict(r) {
@@ -1022,6 +1028,7 @@ function renderPredict(r) {
     `每个时程一条独立 trace，已写入全链路日志`;
 
   renderReferral(r.referral);
+  renderNextActions(r);   // ⑥ 下一步：把"还有趋势可看"这条路明确铺出来
   $("#monotonicNote").textContent = r.monotonic_note || "";
 }
 
@@ -1265,10 +1272,11 @@ function updateSteps() {
 }
 
 /* ---------------- 趋势 ---------------- */
-async function loadTrend(force = false) {
+async function loadTrend(force = false, refreshAI = false) {
   if (!state.pid) return;
   if (force) { state.trend = null; state.riskTimeline = null; }
-  const t = (!force && state.trend) ? state.trend : (await api(`/patients/${encodeURIComponent(state.pid)}/trend`));
+  const t = (!force && state.trend) ? state.trend
+    : (await api(`/patients/${encodeURIComponent(state.pid)}/trend${refreshAI ? "?refresh_ai=1" : ""}`));
   state.trend = t;
 
   await drawRiskTimeline();
@@ -1311,29 +1319,20 @@ async function loadTrend(force = false) {
 /* 风险走势（按真实检查日期回溯）：历史实线 + 未来预测虚线（改动 5/6）。
    审计走势（按预测发生时间）保留给管理台复盘，不再作为用户侧曲线 ——
    它在同一天连传 8 份报告时只会画出一条竖线/平线，正是本次要修的问题。 */
-async function drawRiskTimeline() {
+/** 取回溯风险轨迹数据（评估页迷你图与趋势页大图共用，避免两处画法漂移）。 */
+async function ensureRiskTimeline() {
   if (!state.riskTimeline) {
-    try {
-      state.riskTimeline = await api(`/patients/${encodeURIComponent(state.pid)}/risk-timeline`);
-    } catch (e) { toast(e.message, true); return; }
+    state.riskTimeline = await api(`/patients/${encodeURIComponent(state.pid)}/risk-timeline`);
   }
-  const rt = state.riskTimeline;
-  const pts = rt.points || [];
-  const has = pts.length > 0;
-  $("#riskEmpty").hidden = has;
-  $("#riskChart").style.display = has ? "" : "none";
-  $("#riskBasisNote").textContent = has
-    ? `实线：各检查日期当时可得数据的回溯风险（${rt.model_version || ""}）；` +
-      `虚线：自最近一次检查（${pts[pts.length - 1].at}）起，未来 1/3/5 年内的累计风险预测。预测≠确定结果。`
-    : "";
-  if (!has) return;
+  return state.riskTimeline;
+}
 
-  const h = state.riskHorizon;
+/** 组装 历史实线 + 未来虚线 的 echarts option。compact=true 给评估页迷你图。 */
+function riskTimelineOption(rt, h, compact = false) {
+  const pts = rt.points || [];
   const histData = pts
     .filter((p) => p.horizons[h])
     .map((p) => [p.at, +(p.horizons[h].probability * 100).toFixed(2), p.horizons[h].risk_tier]);
-
-  // 未来累计风险：从最近检查日出发，P(≤+0)=0 起笔，经 +1y/+3y/+5y 三点
   const last = pts[pts.length - 1];
   const lastMs = new Date(last.at).getTime();
   const DAY = 86400000;
@@ -1347,13 +1346,12 @@ async function drawRiskTimeline() {
       ]);
     }
   });
-
   const base = baseOption();
-  chart("riskChart").setOption({
+  return {
     ...base,
     color: [token("--ink"), token("--ink-3")],
     legend: { top: 0, right: 0, icon: "roundRect", itemWidth: 12, itemHeight: 3,
-              textStyle: { color: token("--ink-2"), fontSize: 11 } },
+              textStyle: { color: token("--ink-2"), fontSize: compact ? 10 : 11 } },
     tooltip: {
       ...base.tooltip,
       formatter: (ps) => ps.map((p) => {
@@ -1363,11 +1361,11 @@ async function drawRiskTimeline() {
     },
     xAxis: { ...base.xAxis, axisLabel: { ...base.xAxis.axisLabel,
       formatter: (v) => { const d = new Date(v); return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}`; } } },
-    yAxis: { ...base.yAxis, name: "风险概率 %", min: 0, max: 100 },
+    yAxis: { ...base.yAxis, name: compact ? "" : "风险概率 %", min: 0, max: 100 },
     series: [
       {
         name: `历史 · ${H_LABEL[h] || h}风险（回溯）`, type: "line",
-        smooth: 0.2, symbolSize: 9,
+        smooth: 0.2, symbolSize: compact ? 7 : 9,
         lineStyle: { width: 2, color: token("--ink") },
         itemStyle: { color: (p) => tierColor(histData[p.dataIndex]?.[2]) },
         data: histData,
@@ -1380,13 +1378,97 @@ async function drawRiskTimeline() {
       },
       {
         name: "未来累计风险预测", type: "line",
-        smooth: 0.2, symbolSize: 8, symbol: "emptyCircle",
+        smooth: 0.2, symbolSize: compact ? 6 : 8, symbol: "emptyCircle",
         lineStyle: { width: 2, color: token("--ink-3"), type: "dashed" },
         itemStyle: { color: token("--ink-3") },
         data: futureData,
       },
     ],
-  }, true);
+  };
+}
+
+async function drawRiskTimeline() {
+  let rt;
+  try { rt = await ensureRiskTimeline(); }
+  catch (e) { toast(e.message, true); return; }
+  const pts = rt.points || [];
+  const has = pts.length > 0;
+  $("#riskEmpty").hidden = has;
+  $("#riskChart").style.display = has ? "" : "none";
+  $("#riskBasisNote").textContent = has
+    ? `实线：各检查日期当时可得数据的回溯风险（${rt.model_version || ""}）；` +
+      `虚线：自最近一次检查（${pts[pts.length - 1].at}）起，未来 1/3/5 年内的累计风险预测。预测≠确定结果。`
+    : "";
+  if (!has) return;
+  chart("riskChart").setOption(riskTimelineOption(rt, state.riskHorizon), true);
+}
+
+/** V3.3：评估结果里的迷你风险走势（患者不点趋势页也能看到自己的轨迹）。 */
+async function renderMiniRisk() {
+  const wrap = $("#miniRiskWrap");
+  if (!wrap) return;
+  let rt;
+  try { rt = await ensureRiskTimeline(); } catch { wrap.hidden = true; return; }
+  const pts = rt.points || [];
+  if (!pts.length) { wrap.hidden = true; return; }
+  wrap.hidden = false;
+  const h = state.selHorizon || "3y";
+  chart("riskMiniChart").setOption(riskTimelineOption(rt, h, true), true);
+  const first = pts[0], last = pts[pts.length - 1];
+  const p0 = first.horizons[h]?.probability, p1 = last.horizons[h]?.probability;
+  let word = "";
+  if (pts.length >= 2 && p0 != null && p1 != null) {
+    const d = (p1 - p0) * 100;
+    word = Math.abs(d) < 2 ? "基本持平"
+      : (d > 0 ? `上升了 ${d.toFixed(1)} 个百分点` : `下降了 ${(-d).toFixed(1)} 个百分点`);
+    $("#riskMiniNote").textContent =
+      `从 ${first.at} 到 ${last.at} 共 ${pts.length} 次检查，` +
+      `${H_LABEL[h] || h}风险由 ${pct1(p0)} 变为 ${pct1(p1)}（${word}）。虚线为未来预测，预测≠确定结果。`;
+  } else {
+    $("#riskMiniNote").textContent =
+      `目前只有 ${pts.length} 个检查时间点；上传更多不同日期的报告后，这里会连成完整轨迹。`;
+  }
+  const btn = $("#btnMiniToTrend");
+  if (btn) btn.onclick = () => { go("trend"); };
+  setTimeout(() => state.charts["riskMiniChart"]?.resize(), 30);
+}
+
+/** V3.3：⑥ 下一步导航 —— 内容由本次预测的真实数据拼装，不是固定文案。 */
+function renderNextActions(r) {
+  const sec = $("#sec-next"), box = $("#nextActions");
+  if (!sec || !box) return;
+  sec.hidden = false;
+  const ctx = r.prediction_context || {};
+  const nAbn = (r.risk_overview?.items || []).reduce((s, it) => s + it.indicators.length, 0);
+  const topSys = (r.risk_overview?.items || [])[0]?.group;
+  const lines = [];
+  if ((ctx.n_dates || 0) >= 2) {
+    lines.push(`你有 <b>${ctx.n_dates}</b> 个真实检查时间点、<b>${ctx.n_comparable_indicators}</b> 项可连续比较的指标——` +
+      `每一项都能画出完整的历史曲线，比单次数值更能说明问题。`);
+  } else {
+    lines.push(`目前只有 1 个检查时间点。补充其他日期的历史报告后，就能看到每项指标的变化曲线。`);
+  }
+  if (nAbn > 0 && topSys) {
+    lines.push(`本次共 <b>${nAbn}</b> 项指标异常，首要在<b>${esc(topSys)}</b>——` +
+      `趋势页的「本次 vs 上次」能看到每一项是在变好还是变坏。`);
+  }
+  box.innerHTML = `
+    <p class="next-lead">${lines.join("</p><p class='next-lead'>")}</p>
+    <div class="next-grid">
+      <button class="btn" id="naTrend">📈 查看指标趋势与风险走势 →</button>
+      <button class="btn ghost" id="naAI">🤖 查看 AI 深度分析 →</button>
+      <button class="btn ghost" id="naMore">📷 继续补充历史报告</button>
+    </div>`;
+  $("#naTrend").onclick = () => go("trend");
+  $("#naAI").onclick = () => {
+    go("trend");
+    setTimeout(() => $("#sec-trend-interventions")
+      .scrollIntoView({ behavior: "smooth", block: "start" }), 120);
+  };
+  $("#naMore").onclick = () => {
+    $("#sec-ingest").scrollIntoView({ behavior: "smooth", block: "start" });
+    setTimeout(() => $("#repImage").click(), 350);
+  };
 }
 
 $$("#riskHorizonChips .chip").forEach((b) => b.addEventListener("click", () => {
@@ -1434,7 +1516,17 @@ function renderAITop3(t) {
   (t.comparisons || []).forEach((c) => { compByName[c.name_cn] = c; });
   box.innerHTML = `<div class="top3-title">最需要关注的 ${top.length} 个问题</div>` +
     top.map((iv, i) => {
-      const hist = iv.target_indicators.map((ti) => {
+      const st = iv.stats || {};
+      const worst = st.worst || {};
+      // 为什么重要：最严重指标的真实数值 + 超限倍数（后端算好的，不套话）
+      const why = worst.name_cn
+        ? `${worst.name_cn} ${num(worst.value)}${worst.unit || ""}` +
+          (worst.over ? `，${worst.over}` : "") +
+          `；本系统共 ${st.n_abnormal ?? iv.target_indicators.length} 项指标异常`
+        : iv.target_indicators.slice(0, 4).join("、");
+      // 历史变化：优先用后端逐指标明细句（值+超限+趋势），没有再退回对比表
+      const details = (iv.details || []).slice(0, 3);
+      const hist = details.length ? details : iv.target_indicators.map((ti) => {
         const nm = ti.split(" (")[0];
         const c = compByName[nm];
         if (!c) return null;
@@ -1442,13 +1534,19 @@ function renderAITop3(t) {
           ? `${nm}较上次${c.direction}${c.worsened ? "且加重" : ""}`
           : `${nm}较上次平稳`;
       }).filter(Boolean).slice(0, 3);
+      // 当前风险：由真实统计量拼装
+      const risk = st.n_worsened > 0
+        ? `${st.n_worsened} 项较上次真实恶化（超出个体生物学变异），属于优先处理项`
+        : (st.max_grade >= 3
+          ? `存在重度偏离（最大分级 ${st.max_grade} 级），即使是首次记录也建议尽快复核`
+          : `存在异常但较上次未见加重，处于可通过生活方式积极改善的窗口`);
       return `<div class="top3-item">
         <div class="top3-head"><span class="top3-n">${i + 1}</span><b>${esc(iv.system)}</b>
           <span class="tag ${iv.level === "重点关注" ? "t3" : "t2"}">${esc(iv.level)}</span></div>
         <div class="top3-body">
-          <p><b>为什么重要：</b>${iv.target_indicators.slice(0, 4).map(esc).join("、")}</p>
+          <p><b>为什么重要：</b>${esc(why)}</p>
           <p><b>历史变化：</b>${hist.length ? hist.map(esc).join("；") : "累计两次以上记录后可见变化方向"}</p>
-          <p><b>当前风险：</b>该系统当前${iv.level === "重点关注" ? "存在恶化中的异常，属于优先处理项" : "存在异常但未见加重，建议积极改善"}</p>
+          <p><b>当前风险：</b>${esc(risk)}</p>
           <p><b>建议关注：</b>${esc(iv.followup_cycle)}</p>
         </div>
       </div>`;
@@ -1463,7 +1561,7 @@ function renderAIAdvisor(t) {
     if (ai && ai.source === "AI_ONLINE_LLM") {
       srcLbl.textContent = "AI 在线临床大模型（深度分析完成）";
     } else {
-      srcLbl.textContent = "AI 临床专家模型（深度分析完成）";
+      srcLbl.textContent = "内置临床知识引擎（按本次数据离线生成；配置在线模型密钥后自动升级）";
     }
   }
 
@@ -1475,12 +1573,20 @@ function renderAIAdvisor(t) {
   // 改动 7：结论排序在上（renderAITop3），长文本一律进展开区域
   let html = "";
 
-  // 1. 若有 LLM 自由生成的叙述文本，优先展示
+  // 0. 本次分析的对象画像（由后端真实数据拼装，方便核对"分析的确是这份数据"）
+  if (ai && ai.patient_summary) {
+    html += `<div class="ai-sub">本次分析对象：${esc(ai.patient_summary)}${
+      ai.abnormal_systems && ai.abnormal_systems.length
+        ? ` · 命中系统：${ai.abnormal_systems.map(esc).join("、")}` : ""}</div>`;
+  }
+
+  // 1. 若有 LLM 自由生成的叙述文本，优先展示（按段落渲染，不糊成一坨）
   if (ai && ai.llm_narrative_text) {
+    const paras = String(ai.llm_narrative_text).split(/\n{1,}/).filter((x) => x.trim());
     html += `
       <div class="ai-chapter-card">
         <div class="ai-ch-title"><span class="ch-badge">LLM</span> <strong>🤖 大模型综合临床见解</strong></div>
-        <div class="prose ai-prose">${esc(ai.llm_narrative_text)}</div>
+        <div class="prose ai-prose">${paras.map((p) => `<p class="ai-para">${esc(p)}</p>`).join("")}</div>
       </div>
     `;
   }
@@ -1497,11 +1603,11 @@ function renderAIAdvisor(t) {
     `;
   }
 
-  // 3. 第二章：个性化精准膳食营养处方
+  // 3. 第二章：个性化精准膳食营养方案
   if (ai && ai.diet_interventions && ai.diet_interventions.length) {
     html += `
       <div class="ai-chapter-card">
-        <div class="ai-ch-title"><span class="ch-badge ch-2">02</span> <strong>🥗 个性化精准膳食与营养干预处方</strong></div>
+        <div class="ai-ch-title"><span class="ch-badge ch-2">02</span> <strong>🥗 个性化精准膳食与营养干预方案</strong></div>
         <div class="ai-diet-grid">
           ${ai.diet_interventions.map((d) => `
             <div class="ai-block">
@@ -1518,7 +1624,7 @@ function renderAIAdvisor(t) {
   if (ai && ai.lifestyle_interventions && ai.lifestyle_interventions.length) {
     html += `
       <div class="ai-chapter-card">
-        <div class="ai-ch-title"><span class="ch-badge ch-3">03</span> <strong>🏃 生活方式、睡眠节律与分级运动处方</strong></div>
+        <div class="ai-ch-title"><span class="ch-badge ch-3">03</span> <strong>🏃 生活方式、睡眠节律与分级运动方案</strong></div>
         <div class="ai-diet-grid">
           ${ai.lifestyle_interventions.map((l) => `
             <div class="ai-block">
@@ -1575,7 +1681,7 @@ function renderAIAdvisor(t) {
   }
 
   box.innerHTML = html
-    ? `<details class="fold ai-fold"><summary>展开完整专业分析（机制剖析 / 膳食与运动处方 / 随访日程）</summary>
+    ? `<details class="fold ai-fold"><summary>展开完整专业分析（机制剖析 / 膳食与运动方案 / 随访日程）</summary>
        <div style="margin-top:12px">${html}</div></details>`
     : "";
 }
@@ -1738,11 +1844,11 @@ $("#btnAB").addEventListener("click", async () => {
 
 $("#btnRefreshAI").addEventListener("click", async () => {
   if (!state.pid) return toast("请先选择患者", true);
-  toast("正在调用 AI 临床大模型生成深度解读与干预方案...");
+  toast("正在重新生成 AI 深度解读与干预方案…");
   try {
-    delete state.trend;
-    await loadTrend();
-    toast("AI 临床干预方案已更新！");
+    await loadTrend(true, true);   // refresh_ai=1：绕过服务端 AI 缓存真正重跑
+    const src = state.trend?.ai_analysis?.source;
+    toast(src === "AI_ONLINE_LLM" ? "AI 在线大模型解读已更新" : "AI 临床引擎解读已更新（未配置在线模型密钥）");
   } catch (e) {
     toast(e.message, true);
   }

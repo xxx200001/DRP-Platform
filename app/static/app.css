@@ -871,3 +871,21 @@ details.fold > summary:hover { color: var(--ink); }
 }
 .ai-narrative-title { font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--ink-1); }
 .ai-narrative p { font-size: 13px; line-height: 1.8; color: var(--ink-2); margin: 0; }
+
+/* ================= V3.3：评估内嵌风险走势 + ⑥下一步导航 + AI 文本 ================= */
+.mini-risk{margin-top:16px;border:1px solid var(--line);border-radius:14px;
+  padding:12px 14px;background:var(--paper-2)}
+.mini-risk-head{display:flex;align-items:center;justify-content:space-between;
+  gap:10px;margin-bottom:6px;font-size:13px}
+.mini-risk .chart{height:220px}
+@media (max-width:640px){.mini-risk .chart{height:190px}}
+
+.next-lead{margin:0 0 10px;font-size:13.5px;line-height:1.7;color:var(--ink-2)}
+.next-lead b{color:var(--ink)}
+.next-grid{display:flex;flex-wrap:wrap;gap:10px;margin-top:4px}
+.next-grid .btn{flex:1 1 200px}
+
+.ai-sub{font-size:12px;color:var(--ink-3);margin:0 0 10px;padding:8px 10px;
+  border-left:3px solid var(--line);background:var(--paper-2);border-radius:0 8px 8px 0}
+.ai-para{margin:0 0 10px;line-height:1.75}
+.ai-para:last-child{margin-bottom:0}

@@ -6,7 +6,7 @@
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#0f1a17">
 <title>病情预测平台</title>
-<link rel="stylesheet" href="/app.css?v=3.2">
+<link rel="stylesheet" href="/app.css?v=3.3">
 <script src="/vendor/echarts.min.js"></script>
 </head>
 <body>
@@ -236,6 +236,18 @@
           <div class="horizon-mini clickable" id="horizonMini"></div>
           <p class="judge" id="modelJudge"></p>
           <p class="muted" id="predBasis"></p>
+
+          <!-- V3.3：把"风险走势"直接嵌进评估结果 —— 患者不用知道有个趋势页
+               也能看到自己的历史轨迹；想细看再点右上角跳转。 -->
+          <div class="mini-risk" id="miniRiskWrap" hidden>
+            <div class="mini-risk-head">
+              <b>你的风险走势（按真实检查日期）</b>
+              <button class="btn ghost sm" id="btnMiniToTrend">去「趋势」页放大 →</button>
+            </div>
+            <div class="chart" id="riskMiniChart"></div>
+            <p class="muted" id="riskMiniNote" style="margin:6px 0 0"></p>
+          </div>
+
           <p class="muted" id="servedBy" style="margin:12px 0 0"></p>
         </div>
       </div>
@@ -264,6 +276,16 @@
         <div id="referralBox"></div>
         <div class="divider"></div>
         <div id="lifestyleBox"></div>
+      </div>
+
+      <!-- V3.3：⑥ 明确的"下一步"导航 —— 解决"看完评估不知道还有趋势"的断头路。
+           内容由本次预测的真实数据拼装（几个时间点、几项可比指标、几项异常）。 -->
+      <div class="card" id="sec-next" hidden>
+        <header>
+          <h2>⑥ 下一步 · 建议看看这些</h2>
+          <span class="note">单次评估是切面，趋势才是全貌</span>
+        </header>
+        <div id="nextActions"></div>
       </div>
 
       <!-- STEP 4：后续健康跟踪（普通用户人话版） -->
@@ -480,6 +502,6 @@
 </dialog>
 
 <div id="toast" role="status" aria-live="polite"></div>
-<script src="/app.js?v=3.2"></script>
+<script src="/app.js?v=3.3"></script>
 </body>
 </html>

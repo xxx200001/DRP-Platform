@@ -179,7 +179,7 @@ class PredictIn(BaseModel):
 # ---------------------------------------------------------------------------
 _TIMELINE_GROUPS: dict[str, tuple[str, ...]] = {
     "血脂": ("TG", "TC", "LDLC", "HDLC"),
-    "肝功能": ("ALT", "AST", "GGT", "TBIL", "ALB"),
+    "肝功能": ("ALT", "AST", "GGT", "ALP", "TBIL", "ALB"),
     "肾功能": ("CREA", "UREA", "UA", "UACR"),
     "血糖": ("GLU", "HBA1C", "INS"),
     "血压": ("SBP", "DBP"),
@@ -261,6 +261,9 @@ class ServerState:
     # 回溯风险时间轴缓存：key=(pid, n_records, last_measured_at)。
     # 数据一变 key 就变，天然失效；单机 demo 规模无需 LRU。
     risk_timeline_cache: dict = field(default_factory=dict)
+    # V3.3：趋势页 AI 深度分析缓存（同一份数据只调用一次在线 LLM；
+    # 「重新由 AI 生成」按钮带 refresh_ai=1 绕过）。失效时机与上面同步。
+    ai_analysis_cache: dict = field(default_factory=dict)
 
     # ------------------------------------------------------------------
     def ensure_version_loaded(self, version: str) -> None:
@@ -627,6 +630,7 @@ def build_server(app_data: str | Path):
             )
 
         st.risk_timeline_cache.clear()
+        st.ai_analysis_cache.clear()
         return {
             "report_id": report_id,
             "stored": stored,
@@ -687,6 +691,7 @@ def build_server(app_data: str | Path):
             raise HTTPException(422, "检查日期不能晚于今天")
         st.db.update_report_date(report_id, str(ts))
         st.risk_timeline_cache.clear()
+        st.ai_analysis_cache.clear()
         return {"id": report_id, "measured_at": str(ts)}
 
     @app.delete("/api/reports/{report_id}")
@@ -694,6 +699,7 @@ def build_server(app_data: str | Path):
         _report_or_404(report_id)
         n = st.db.delete_report(report_id)
         st.risk_timeline_cache.clear()
+        st.ai_analysis_cache.clear()
         return {"deleted": report_id, "records_removed": n}
 
     @app.post("/api/reports/{report_id}/reparse")
@@ -726,6 +732,7 @@ def build_server(app_data: str | Path):
             report_id, preport.n_ingested, preport.n_review, preport.n_unmatched
         )
         st.risk_timeline_cache.clear()
+        st.ai_analysis_cache.clear()
         return {
             "report_id": report_id, "stored": stored,
             "parse": preport.to_log_dict(),
@@ -1050,13 +1057,18 @@ def build_server(app_data: str | Path):
         if concern in ("all", "other") or not concern_groups:
             concern_answer = None
         elif concern_items:
+            # 前端会加「你关注的 X：」前缀，这里只给结论本体（修复 V3.2 重复前缀）
+            top_c = concern_items[0]
+            lead = "、".join(
+                f"{x['name_cn']} {x['value']:g}{x['unit'] or ''}"
+                for x in top_c["indicators"][:3]
+            )
             concern_answer = {
                 "status": "abnormal",
                 "items": [x["rank"] for x in concern_items],
                 "text": (
-                    f"你关注的「{_CONCERN_LABEL.get(concern, concern)}」方向"
-                    f"存在需要关注的异常，详见下方第 "
-                    f"{'、'.join(str(x['rank']) for x in concern_items)} 项。"
+                    f"存在需要关注的异常（{lead} 等），"
+                    f"详见下方总览第 {'、'.join(str(x['rank']) for x in concern_items)} 项。"
                 ),
             }
         else:
@@ -1064,9 +1076,8 @@ def build_server(app_data: str | Path):
                 "status": "normal",
                 "items": [],
                 "text": (
-                    f"你关注的「{_CONCERN_LABEL.get(concern, concern)}」方向：本次已入库的"
-                    f"相关指标未见明显异常；系统同时完成了全身各系统扫描，"
-                    f"额外发现见下方总览。"
+                    "本次已入库的相关指标未见明显异常；系统同时完成了全身各系统扫描，"
+                    "额外发现见下方总览。"
                 ),
             }
 
@@ -1146,68 +1157,88 @@ def build_server(app_data: str | Path):
                 "indicators": [],
             })
 
-        # -------- V3.2：AI 综合风险叙述 --------
+        # -------- V3.3：AI 综合风险叙述（密钥只读环境变量；输出过合规闸） --------
+        # 旧版此处硬编码了 API key 与第三方 base_url —— 已彻底移除：
+        # 未配置 ANTHROPIC_API_KEY/OPENAI_API_KEY 时直接走规则叙述，功能不缺。
         ai_risk_narrative = None
         try:
-            from drp.serving.llm_advisor import _call_anthropic
-            api_key = os.environ.get(
-                "ANTHROPIC_API_KEY",
-                "sk-HcQuMphdXJMXangi05KHQ6cZLERVPzTLWAOTPYzMYshjisZu",
-            )
-            base_url = os.environ.get("ANTHROPIC_BASE_URL", "https://daodun.cc")
-            llm_model = os.environ.get("SOULHEALTH_LLM_MODEL", "claude-sonnet-4-6")
+            from drp.serving.compliance import is_compliant as _is_ok
+            from drp.serving.llm_advisor import call_llm, resolve_llm_env
 
-            # 构建 prompt
-            abnormal_desc = []
-            for sr in system_risks:
-                if sr["level"] > 0:
-                    ind_strs = []
-                    for ind in sr["indicators"][:3]:
-                        g = ind.get("grade", 0)
-                        tag = "偏高" if g and g > 0 else "偏低" if g and g < 0 else ""
-                        ind_strs.append(f"{ind['name_cn']} {ind['value']}{ind.get('unit','')}{tag}")
-                    abnormal_desc.append(f"- {sr['system']}（{sr['level_label']}）：{', '.join(ind_strs)}")
+            if resolve_llm_env()["provider"] is not None:
+                # prompt 里给足"这份化验单独有"的信息：真实数值、较上次趋势、
+                # 数据跨度、用户关注点 —— 不同的报告必然得到不同的叙述。
+                abnormal_desc = []
+                for sr in system_risks:
+                    if sr["level"] > 0:
+                        ind_strs = []
+                        for ind in sr["indicators"][:3]:
+                            g = ind.get("grade", 0)
+                            tag = "偏高" if g and g > 0 else "偏低" if g and g < 0 else ""
+                            t = f"，{ind['trend']}" if ind.get("trend") else ""
+                            ind_strs.append(
+                                f"{ind['name_cn']} {ind['value']}{ind.get('unit', '')}{tag}{t}")
+                        abnormal_desc.append(
+                            f"- {sr['system']}（{sr['level_label']}）：{'；'.join(ind_strs)}")
 
-            model_prob = results[1]["probability"] if len(results) > 1 else results[0]["probability"]
-            model_tier = results[1]["risk_tier"] if len(results) > 1 else results[0]["risk_tier"]
+                model_prob = results[1]["probability"] if len(results) > 1 else results[0]["probability"]
+                model_tier = results[1]["risk_tier"] if len(results) > 1 else results[0]["risk_tier"]
+                sex_cn = "女" if str(patient.get("sex", "")).upper() == "F" else "男"
 
-            prompt = (
-                f"患者信息：{patient.get('sex','未知')}，{patient.get('age','未知')}岁\n"
-                f"模型综合风险评估：未来3年综合慢病风险 {model_prob*100:.1f}%（{model_tier}）\n"
-                f"本次检查发现的系统异常：\n"
-                + "\n".join(abnormal_desc) +
-                f"\n稳定系统：{', '.join(stable_groups) if stable_groups else '无'}"
-                "\n\n请用 3-5 句话给出综合风险解读：\n"
-                "1. 指出最需要关注的系统及原因\n"
-                "2. 解释各系统之间的关联性（如肝功异常可能影响代谢等）\n"
-                "3. 给出简要的生活建议\n"
-                "语气要专业但通俗。不要分条，用自然段落。"
-            )
-            system_prompt = (
-                "你是一位有 20 年临床经验的全科医生。根据患者的化验报告异常指标，"
-                "给出综合、有逻辑的健康风险解读。注意：这是辅助参考，不是诊断结论。"
-            )
-            raw = _call_anthropic(api_key, base_url, llm_model, prompt, system_prompt, timeout=15.0)
-            if raw:
-                ai_risk_narrative = raw
-                logger.info("[Predict] AI 综合风险叙述生成成功 (%d 字)", len(raw))
+                prompt = (
+                    f"患者：{sex_cn}，{_age_of(patient):.0f} 岁。\n"
+                    f"数据范围：{exam_dates[0] if exam_dates else '—'} 至 "
+                    f"{exam_dates[-1] if exam_dates else '—'}，共 {len(reports)} 份报告、"
+                    f"{len(recs)} 条记录。\n"
+                    f"用户本次最关注：{_CONCERN_LABEL.get(concern, '全面分析')}。\n"
+                    f"统计模型输出：未来 3 年综合慢病风险 {model_prob * 100:.1f}%（{model_tier}）。\n"
+                    f"本次发现的系统异常（真实数值 + 较上次变化）：\n"
+                    + ("\n".join(abnormal_desc) or "（无）")
+                    + f"\n稳定系统：{', '.join(stable_groups) if stable_groups else '无'}"
+                    "\n\n请用 3-5 句自然段落给出针对上述具体数值的综合解读：\n"
+                    "先回答用户关注的方向，再指出最需要关注的系统及原因，"
+                    "解释系统间关联，最后给一句可执行的生活建议。"
+                    "只解释已给出的模型概率，不要自行编造新概率；"
+                    "不使用『确诊/治疗/开药/剂量』等词。"
+                )
+                system_prompt = (
+                    "你是一位经验丰富的全科医生。根据患者的化验异常指标与统计模型结果，"
+                    "给出综合、有逻辑的健康风险解读。这是辅助参考，不是诊断结论。"
+                )
+                raw = call_llm(prompt, system_prompt)
+                if raw and _is_ok(raw):
+                    ai_risk_narrative = raw
+                    logger.info("[Predict] AI 综合风险叙述生成成功 (%d 字)", len(raw))
+                elif raw:
+                    logger.warning("[Predict] AI 叙述未过合规出口闸，降级为规则叙述")
         except Exception as e:
             logger.warning("[Predict] AI 综合风险叙述失败: %s", e)
 
-        # 如果 AI 不可用，用规则生成一段
+        # AI 不可用/未过闸时，用规则从真实数据拼装一段（逐份报告都不同）
         if not ai_risk_narrative and overview_items:
             top = overview_items[0]
+            lead_inds = "、".join(
+                f"{x['name_cn']} {x['value']:g}{x['unit'] or ''}"
+                + (f"（{x['trend']}）" if x.get("trend") else "")
+                for x in top["indicators"][:3]
+            )
             parts = [
-                f"本次检查最需要关注的是{top['group']}方面，共有 {len(top['indicators'])} 项指标异常。"
+                f"本次最需要关注的是{top['group']}：{lead_inds}"
+                f"，共 {len(top['indicators'])} 项相关指标异常"
+                + (f"、其中 {sum(1 for x in top['indicators'] if x.get('worsened'))} 项较上次加重"
+                   if any(x.get("worsened") for x in top["indicators"]) else "") + "。"
             ]
             if top.get("direction"):
-                parts.append(f"若长期未干预，{top['direction']}。")
+                parts.append(f"若长期未干预，可能向{top['direction']}方向发展（风险提示，非诊断）。")
             if len(overview_items) > 1:
-                others = "、".join(x["group"] for x in overview_items[1:])
-                parts.append(f"此外，{others}方面也有轻度偏离，建议定期监测。")
+                others = "、".join(
+                    f"{x['group']}（{x['indicators'][0]['name_cn']}等 {len(x['indicators'])} 项）"
+                    for x in overview_items[1:3]
+                )
+                parts.append(f"此外 {others} 也有偏离，建议一并跟踪。")
             if stable_groups:
-                parts.append(f"{', '.join(stable_groups[:3])}等系统目前表现稳定。")
-            parts.append("建议在医生指导下进一步检查确认，并注意生活方式调整。")
+                parts.append(f"{'、'.join(stable_groups[:3])}目前表现稳定。")
+            parts.append("建议按下方就医建议完成复查，并从饮食与运动入手调整生活方式。")
             ai_risk_narrative = "".join(parts)
 
         return {
@@ -1231,7 +1262,7 @@ def build_server(app_data: str | Path):
 
     # ---------------- 趋势报告与 AI 大模型深度分析 ----------------
     @app.get("/api/patients/{pid}/trend")
-    def patient_trend(pid: str):
+    def patient_trend(pid: str, refresh_ai: int = 0):
         patient = _patient_or_404(pid)
         recs = _records_frame(pid)
         pseudo = st.audit.pseudonymize(pid)
@@ -1244,16 +1275,40 @@ def build_server(app_data: str | Path):
         )
         data = report.to_dict()
 
-        # 接入 AI 大模型临床深度解读与干预方案
+        # V3.3：给 AI 的患者信息用真实人口学（旧版 age 永远是"—"、sex 是 M/F，
+        # 在线大模型拿到的是残缺画像）。
         p_info = {
-            "name": patient.get("name", patient.get("patient_id", pid)),
-            "sex": patient.get("sex", "未知"),
-            "age": patient.get("age", "—"),
-            "n_records": patient.get("n_records", 0),
+            "name": patient.get("patient_id", pid),
+            "sex": "女" if str(patient.get("sex", "")).upper() == "F" else "男",
+            "age": round(_age_of(patient)),
+            "n_records": len(recs),
         }
         factors = []
         if report.change_attribution:
             factors = [f.phrase() for f in report.change_attribution.factors]
+
+        # 数据跨度（真实检查日期口径）与当前 3 年分层，供 AI 引擎定随访周期
+        span_label = None
+        if not recs.empty:
+            ds = sorted({str(x)[:10] for x in recs[COL_MEASURED_AT]})
+            if len(ds) >= 2:
+                days = int((pd.Timestamp(ds[-1]) - pd.Timestamp(ds[0])).days)
+                yy, rem = divmod(days, 365)
+                mm = round(rem / 30.44)
+                if mm == 12:
+                    yy, mm = yy + 1, 0
+                span_label = ((f"{yy}年" if yy else "") + (f"{mm}个月" if mm else "")) or "不足1个月"
+        tier_hint = None
+        pts3 = (data.get("risk_trajectories") or {}).get("3y", {}).get("points") or []
+        if pts3:
+            tier_hint = pts3[-1].get("risk_tier")
+
+        # 同一份数据只做一次 AI 深度分析；「重新生成」带 refresh_ai=1 绕过
+        cache_key = (pid, int(len(recs)),
+                     str(recs[COL_MEASURED_AT].max()) if not recs.empty else "")
+        if not refresh_ai and cache_key in st.ai_analysis_cache:
+            data["ai_analysis"] = st.ai_analysis_cache[cache_key]
+            return data
 
         try:
             from drp.serving.llm_advisor import generate_llm_trend_analysis
@@ -1262,8 +1317,12 @@ def build_server(app_data: str | Path):
                 data.get("comparisons", []),
                 data.get("risk_trajectories", {}),
                 factors=factors,
+                snapshot=data.get("latest_snapshot", []),
+                risk_tier=tier_hint,
+                span_label=span_label,
             )
             data["ai_analysis"] = ai_data
+            st.ai_analysis_cache[cache_key] = ai_data
         except Exception as e:
             logger.warning("[Trend] AI 大模型分析生成异常: %s", e)
             data["ai_analysis"] = None
@@ -1579,11 +1638,12 @@ def _ai_vision_ocr_extract(image_b64: str) -> list:
     import json
     import re
 
-    api_key = os.environ.get(
-        "ANTHROPIC_API_KEY",
-        "sk-HcQuMphdXJMXangi05KHQ6cZLERVPzTLWAOTPYzMYshjisZu",
-    )
-    base_url = os.environ.get("ANTHROPIC_BASE_URL", "https://daodun.cc")
+    # V3.3：密钥只从环境变量读取（旧版硬编码缺省 key/第三方端点已移除）。
+    # 未配置时直接返回空 —— 上层自动回落本地 RapidOCR，功能不中断。
+    api_key = (os.environ.get("ANTHROPIC_API_KEY") or "").strip()
+    if not api_key or "change-me" in api_key:
+        return []
+    base_url = os.environ.get("ANTHROPIC_BASE_URL", "https://api.anthropic.com")
 
     media_type = "image/jpeg"
     clean_b64 = image_b64
@@ -1613,7 +1673,7 @@ def _ai_vision_ocr_extract(image_b64: str) -> list:
             "x-api-key": api_key,
             "anthropic-version": "2023-06-01",
             "content-type": "application/json",
-            "User-Agent": "SoulHealth-DRP/3.2",
+            "User-Agent": "SoulHealth-DRP/3.3",
         }
         req_body = {
             "model": os.environ.get("VISION_MODEL", "claude-sonnet-4-6"),
