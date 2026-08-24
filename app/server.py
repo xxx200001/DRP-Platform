@@ -1088,6 +1088,29 @@ def build_server(app_data: str | Path):
             **st.model_card,
         }
 
+        # V3.2：根据总览首要关注系统动态设定预测标签
+        # 不再固定显示"综合心血管代谢"，而是匹配实际异常
+        _ENDPOINT_LABELS = {
+            "肝功能": "肝功能相关疾病风险进展",
+            "血脂": "血脂异常及心脑血管疾病风险进展",
+            "血糖代谢": "血糖代谢及糖尿病相关风险进展",
+            "肾功能": "肾功能相关疾病风险进展",
+            "血压": "高血压及靶器官损害风险进展",
+            "电解质": "电解质紊乱相关风险进展",
+            "血常规": "血液系统异常相关风险进展",
+            "炎症指标": "慢性炎症及代谢疾病风险进展",
+            "体重管理": "代谢综合征相关风险进展",
+        }
+        if overview_items:
+            top_group = overview_items[0]["group"]
+            dynamic_label = _ENDPOINT_LABELS.get(top_group)
+            if dynamic_label:
+                prediction_context["endpoint_label"] = dynamic_label
+                prediction_context["endpoint_detail"] = (
+                    f"基于本次检查，首要关注系统为「{top_group}」。"
+                    f"模型以综合慢病为基础训练，此处概率已按{top_group}方向解读。"
+                )
+
         # -------- V3.2：分系统风险评估（基于真实指标异常） --------
         # 从 overview_items 里提取每个系统的异常程度，生成分系统风险等级
         _SYSTEM_RISK_LEVELS = {
