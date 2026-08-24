@@ -1676,20 +1676,29 @@ def _ocr_extract_image(image_b64: str) -> dict:
     return {"text": "", "engine": "none", "rotation": 0, "layout": "single", "n_redacted": 0}
 
 
-def _ai_vision_ocr_extract(image_b64: str) -> list:
+def _ai_vision_ocr_extract(image_b64: str) -> list | dict:
     """
     调用 AI 视觉模型识别化验单图片中的检验指标。
+    支持双协议智能故障切换：
+      1. Anthropic /v1/messages 原生协议（Claude 3.5/3.7 Vision 等）
+      2. OpenAI / Gemini / OneAPI /v1/chat/completions 协议（GPT-4o, Gemini-1.5/2.0, Qwen-VL 等）
+      若主通道遇 429 负载/503/网络错误，自动无缝尝试备选协议，最后兜底 RapidOCR。
     """
     import urllib.request
     import json
     import re
 
-    # V3.3：密钥只从环境变量读取（旧版硬编码缺省 key/第三方端点已移除）。
-    # 未配置时直接返回空 —— 上层自动回落本地 RapidOCR，功能不中断。
-    api_key = (os.environ.get("ANTHROPIC_API_KEY") or "").strip()
-    if not api_key or "change-me" in api_key:
+    anthropic_key = (os.environ.get("ANTHROPIC_API_KEY") or "").strip()
+    openai_key = (os.environ.get("OPENAI_API_KEY") or os.environ.get("GEMINI_API_KEY") or anthropic_key).strip()
+
+    if (not anthropic_key and not openai_key) or ("change-me" in anthropic_key and "change-me" in openai_key):
         return []
-    base_url = os.environ.get("ANTHROPIC_BASE_URL", "https://api.anthropic.com")
+
+    anthropic_base = os.environ.get("ANTHROPIC_BASE_URL", "https://api.anthropic.com").rstrip("/")
+    openai_base = (os.environ.get("OPENAI_BASE_URL") or os.environ.get("GEMINI_BASE_URL") or anthropic_base).rstrip("/")
+
+    claude_model = os.environ.get("VISION_MODEL", "claude-sonnet-4-6")
+    openai_model = (os.environ.get("OPENAI_VISION_MODEL") or os.environ.get("GEMINI_VISION_MODEL") or "gpt-4o")
 
     media_type = "image/jpeg"
     clean_b64 = image_b64
@@ -1713,51 +1722,117 @@ def _ai_vision_ocr_extract(image_b64: str) -> list:
         '[{"name_raw": "丙氨酸氨基转移酶(ALT)", "value": 68, "unit": "U/L", "reference": "9-50"}]}'
     )
 
-    try:
-        url = f"{base_url.rstrip('/')}/v1/messages"
-        headers = {
-            "x-api-key": api_key,
-            "anthropic-version": "2023-06-01",
-            "content-type": "application/json",
-            "User-Agent": "SoulHealth-DRP/3.3",
-        }
-        req_body = {
-            "model": os.environ.get("VISION_MODEL", "claude-sonnet-4-6"),
-            "max_tokens": 2048,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "image",
-                            "source": {
-                                "type": "base64",
-                                "media_type": media_type,
-                                "data": clean_b64,
-                            },
-                        },
-                        {"type": "text", "text": prompt_text},
-                    ],
-                }
-            ],
-        }
-        req = urllib.request.Request(
-            url,
-            data=json.dumps(req_body).encode("utf-8"),
-            headers=headers,
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            res_data = json.loads(resp.read().decode("utf-8"))
-            txt = res_data["content"][0]["text"].strip()
-            txt = re.sub(r"^```[a-z]*\s*", "", txt, flags=re.MULTILINE)
-            txt = re.sub(r"\s*```$", "", txt, flags=re.MULTILINE)
+    def _parse_response_text(txt: str):
+        txt = txt.strip()
+        txt = re.sub(r"^```[a-zA-Z0-9_-]*\s*", "", txt)
+        txt = re.sub(r"\s*```$", "", txt)
+        txt = txt.strip()
+        try:
             parsed = json.loads(txt)
             if isinstance(parsed, dict) and parsed.get("indicators"):
                 return parsed
             if isinstance(parsed, list) and len(parsed) > 0:
                 return parsed
-    except Exception as err:
-        logger.warning("[OCR] Vision API 异常 (%s)", err)
+        except Exception:
+            m = re.search(r"(\{[\s\S]*\}|\[[\s\S]*\])", txt)
+            if m:
+                try:
+                    parsed = json.loads(m.group(1))
+                    if isinstance(parsed, dict) and parsed.get("indicators"):
+                        return parsed
+                    if isinstance(parsed, list) and len(parsed) > 0:
+                        return parsed
+                except Exception:
+                    pass
+        return None
+
+    # --- 通道 1: Anthropic 原生 /v1/messages 协议 ---
+    if anthropic_key and "change-me" not in anthropic_key:
+        try:
+            url = f"{anthropic_base}/v1/messages"
+            headers = {
+                "x-api-key": anthropic_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+                "User-Agent": "SoulHealth-DRP/3.5",
+            }
+            req_body = {
+                "model": claude_model,
+                "max_tokens": 2048,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": media_type,
+                                    "data": clean_b64,
+                                },
+                            },
+                            {"type": "text", "text": prompt_text},
+                        ],
+                    }
+                ],
+            }
+            req = urllib.request.Request(
+                url,
+                data=json.dumps(req_body).encode("utf-8"),
+                headers=headers,
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=25) as resp:
+                res_data = json.loads(resp.read().decode("utf-8"))
+                txt = res_data["content"][0]["text"]
+                res = _parse_response_text(txt)
+                if res:
+                    logger.info("[OCR] Anthropic Vision (%s) 识别成功", claude_model)
+                    return res
+        except Exception as err:
+            logger.warning("[OCR] Anthropic Vision 异常 (%s)，尝试 OpenAI/Gemini 备选通道...", err)
+
+    # --- 通道 2: OpenAI / Gemini / OneAPI /v1/chat/completions 协议 ---
+    if openai_key and "change-me" not in openai_key:
+        try:
+            url = f"{openai_base}/v1/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {openai_key}",
+                "content-type": "application/json",
+                "User-Agent": "SoulHealth-DRP/3.5",
+            }
+            req_body = {
+                "model": openai_model,
+                "max_tokens": 2048,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:{media_type};base64,{clean_b64}"
+                                },
+                            },
+                            {"type": "text", "text": prompt_text},
+                        ],
+                    }
+                ],
+            }
+            req = urllib.request.Request(
+                url,
+                data=json.dumps(req_body).encode("utf-8"),
+                headers=headers,
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=25) as resp:
+                res_data = json.loads(resp.read().decode("utf-8"))
+                txt = res_data["choices"][0]["message"]["content"]
+                res = _parse_response_text(txt)
+                if res:
+                    logger.info("[OCR] OpenAI/Gemini Vision (%s) 备选通道识别成功", openai_model)
+                    return res
+        except Exception as err:
+            logger.warning("[OCR] OpenAI/Gemini Vision 备选通道异常 (%s)", err)
 
     return []

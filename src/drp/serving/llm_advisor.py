@@ -47,8 +47,7 @@ _H_CN = {"1y": "未来 1 年", "3y": "未来 3 年", "5y": "未来 5 年"}
 # ---------------------------------------------------------------------------
 def resolve_llm_env() -> dict[str, Any]:
     """
-    返回 {"provider","api_key","base_url","model","timeout"}；未配置密钥时
-    provider 为 None —— 调用方必须跳过在线调用，直接走兜底引擎。
+    返回环境配置字典；未配置密钥时 provider 为 None —— 调用方必须跳过在线调用，直接走兜底引擎。
     """
     timeout = 25.0
     try:
@@ -57,25 +56,26 @@ def resolve_llm_env() -> dict[str, Any]:
         pass
 
     anthropic_key = (os.environ.get("ANTHROPIC_API_KEY") or "").strip()
-    if anthropic_key and "change-me" not in anthropic_key:
-        return {
-            "provider": "anthropic",
-            "api_key": anthropic_key,
-            "base_url": os.environ.get("ANTHROPIC_BASE_URL", "https://api.anthropic.com"),
-            "model": os.environ.get("SOULHEALTH_LLM_MODEL", "claude-sonnet-4-6"),
-            "timeout": timeout,
-        }
     openai_key = (os.environ.get("OPENAI_API_KEY")
+                  or os.environ.get("GEMINI_API_KEY")
                   or os.environ.get("DEEPSEEK_API_KEY") or "").strip()
-    if openai_key and "change-me" not in openai_key:
-        return {
-            "provider": "openai",
-            "api_key": openai_key,
-            "base_url": os.environ.get("OPENAI_BASE_URL", "https://api.deepseek.com/v1"),
-            "model": os.environ.get("LLM_MODEL", "deepseek-chat"),
-            "timeout": timeout,
-        }
-    return {"provider": None, "api_key": "", "base_url": "", "model": "", "timeout": timeout}
+
+    if (not anthropic_key and not openai_key) or ("change-me" in anthropic_key and "change-me" in openai_key):
+        return {"provider": None, "api_key": "", "base_url": "", "model": "", "timeout": timeout}
+
+    return {
+        "provider": "anthropic" if anthropic_key else "openai",
+        "anthropic_key": anthropic_key if "change-me" not in anthropic_key else "",
+        "anthropic_base": os.environ.get("ANTHROPIC_BASE_URL", "https://api.anthropic.com"),
+        "anthropic_model": os.environ.get("SOULHEALTH_LLM_MODEL", "claude-sonnet-4-6"),
+        "openai_key": openai_key if "change-me" not in openai_key else "",
+        "openai_base": os.environ.get("OPENAI_BASE_URL", "https://api.deepseek.com/v1"),
+        "openai_model": os.environ.get("LLM_MODEL", "deepseek-chat"),
+        "api_key": anthropic_key or openai_key,
+        "base_url": os.environ.get("ANTHROPIC_BASE_URL") or os.environ.get("OPENAI_BASE_URL", ""),
+        "model": os.environ.get("SOULHEALTH_LLM_MODEL") or os.environ.get("LLM_MODEL", ""),
+        "timeout": timeout,
+    }
 
 
 def _call_openai_compatible(api_key: str, base_url: str, model: str,
@@ -115,7 +115,7 @@ def _call_anthropic(api_key: str, base_url: str, model: str,
         "x-api-key": api_key,
         "anthropic-version": "2023-06-01",
         "Content-Type": "application/json",
-        "User-Agent": "SoulHealth-DRP/3.3",
+        "User-Agent": "SoulHealth-DRP/3.5",
     }
     payload = {
         "model": model,
@@ -132,19 +132,23 @@ def _call_anthropic(api_key: str, base_url: str, model: str,
             data = json.loads(resp.read().decode("utf-8"))
             return data["content"][0]["text"].strip()
     except Exception as e:
-        logger.info("[LLM] 外部 Claude 接口不可用 (%s)，切换至内置引擎", str(e))
+        logger.info("[LLM] 外部 Claude 接口不可用 (%s)，尝试备用接口...", str(e))
         return None
 
 
 def call_llm(prompt: str, system_prompt: str) -> str | None:
-    """按环境配置调用在线大模型；未配置或失败返回 None。"""
+    """按环境配置调用在线大模型；支持 Anthropic 与 OpenAI 协议自动切换容灾，全部不可用时返回 None 走内置引擎。"""
     env = resolve_llm_env()
-    if env["provider"] == "anthropic":
-        return _call_anthropic(env["api_key"], env["base_url"], env["model"],
-                               prompt, system_prompt, timeout=env["timeout"])
-    if env["provider"] == "openai":
-        return _call_openai_compatible(env["api_key"], env["base_url"], env["model"],
-                                       prompt, system_prompt, timeout=env["timeout"])
+    if env.get("anthropic_key"):
+        res = _call_anthropic(env["anthropic_key"], env["anthropic_base"], env["anthropic_model"],
+                              prompt, system_prompt, timeout=env["timeout"])
+        if res:
+            return res
+    if env.get("openai_key"):
+        res = _call_openai_compatible(env["openai_key"], env["openai_base"], env["openai_model"],
+                                      prompt, system_prompt, timeout=env["timeout"])
+        if res:
+            return res
     return None
 
 
