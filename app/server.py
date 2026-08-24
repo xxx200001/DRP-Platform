@@ -55,7 +55,7 @@ from drp.serving.service import RiskPredictionService, RiskTierScheme, ServiceCo
 from drp.serving.trend import TrendEngine, build_trend_report
 
 from .bootstrap import _PIPELINE_CONFIG, is_bootstrapped
-from .db import PROFILE_COLUMNS, AppDB
+from .db import PROFILE_COLUMNS, AppDB, dedupe_same_day
 
 logger = logging.getLogger(__name__)
 
@@ -435,15 +435,24 @@ def build_server(app_data: str | Path):
         today = pd.Timestamp(datetime.now(timezone.utc).date())
         return float((today - born).days) / 365.25
 
+    def _analysis_rows(pid: str) -> tuple[list[dict], int]:
+        """参与分析（趋势/特征/预测/时间轴统计）的记录：同日重复指标已按
+        「最后入库取值」折叠。存储层与「历史化验记录」列表仍展示全部原始行。"""
+        return dedupe_same_day(st.db.records_for_patient(pid))
+
     def _records_frame(pid: str) -> pd.DataFrame:
-        rows = st.db.records_for_patient(pid)
+        rows, n_dedup = _analysis_rows(pid)
         if not rows:
-            return pd.DataFrame(
+            df = pd.DataFrame(
                 columns=[COL_PATIENT_ID, COL_INDICATOR, COL_VALUE, COL_UNIT, COL_MEASURED_AT, COL_STATUS]
             )
+            df.attrs["n_same_day_dedup"] = 0
+            return df
         df = pd.DataFrame(rows)
+        df = df.drop(columns=["id", "report_id"], errors="ignore")  # 分析帧列口径不变
         df[COL_PATIENT_ID] = pid
         df[COL_MEASURED_AT] = pd.to_datetime(df[COL_MEASURED_AT])
+        df.attrs["n_same_day_dedup"] = int(n_dedup)
         return df
 
     # ---------------- 元信息 ----------------
@@ -733,7 +742,7 @@ def build_server(app_data: str | Path):
         """
         _patient_or_404(pid)
         reports = st.db.list_reports(pid)
-        rows = st.db.records_for_patient(pid)
+        rows, n_dedup = _analysis_rows(pid)   # V3.2：统计口径 = 参与分析的记录
         dates = sorted({str(r["measured_at"])[:10] for r in rows})
         by_code_dates: dict[str, set] = {}
         for r in rows:
@@ -780,6 +789,8 @@ def build_server(app_data: str | Path):
             "n_comparable_indicators": len(comparable),
             "comparable_indicators": comparable,
             "groups": groups,
+            # V3.2：同日多张单子的重复指标数（分析层已按最新上传取值折叠）
+            "n_same_day_dedup": int(n_dedup),
             # 纵向趋势分析的门槛：至少两个真实检查时间点
             "longitudinal_ready": len(dates) >= 2,
         }
@@ -1073,6 +1084,7 @@ def build_server(app_data: str | Path):
             "first_date": exam_dates[0] if exam_dates else None,
             "last_date": exam_dates[-1] if exam_dates else None,
             "n_comparable_indicators": int(n_comparable),
+            "n_same_day_dedup": int(recs.attrs.get("n_same_day_dedup", 0)),
             **st.model_card,
         }
 
@@ -1409,7 +1421,7 @@ def _ocr_extract_image(image_b64: str) -> dict:
             arr = np.frombuffer(raw, dtype=np.uint8)
             img0 = cv2.imdecode(arr, cv2.IMREAD_COLOR)
             if img0 is not None:
-                best = None  # (score, rotation_deg, items, page_w)
+                best = None
                 for k, deg in ((0, 0), (1, 270), (2, 180), (3, 90)):
                     img = img0 if k == 0 else np.ascontiguousarray(np.rot90(img0, k))
                     items = _rapid_items(engine, img)

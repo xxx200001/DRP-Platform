@@ -828,3 +828,17 @@ details.fold > summary:hover { color: var(--ink); }
 .ls-g b { color: var(--ink); }
 .ls-g ul { margin: 3px 0 0; padding-left: 18px; }
 .ls-g li { margin: 2px 0; }
+
+/* ================= V3.2 · 上传节奏统一 ================= */
+
+/* 入库后的"下一步"条：中性底色，与倒计时横幅（t1 色系）区分开 */
+.nextstep {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 10px;
+  margin-top: 14px; padding: 12px 16px;
+  background: var(--surface-2); border: 1px solid var(--line);
+  border-left: 3px solid var(--t1);
+  border-radius: var(--radius-sm); font-size: 13px; line-height: 1.6;
+  color: var(--ink-2);
+}
+.nextstep b { color: var(--t1); }
+.nextstep .tb-ops { margin-left: auto; display: flex; gap: 8px; }

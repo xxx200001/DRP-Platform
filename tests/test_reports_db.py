@@ -25,7 +25,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from app.db import AppDB  # noqa: E402
+from app.db import AppDB, dedupe_same_day  # noqa: E402
 
 
 # ---------------------------------------------------------------- 工具
@@ -161,6 +161,54 @@ class TestDetectReportDate(unittest.TestCase):
     def test_birthdate_not_picked(self):
         # 只有出生日期（<2000）→ 识别不出，交给用户填
         self.assertEqual(self.detect("出生日期 1962-05-01")[0], None)
+
+
+# ---------------------------------------------------------------- 同日去重（V3.2）
+
+class TestDedupeSameDay(unittest.TestCase):
+    """真实场景：同一天两张单子（心肌酶谱 + 生化 32 项）同指标不同值。
+    分析层必须一 (指标, 日) 一值，且取【最后入库】的一条；存储层不动。"""
+
+    def setUp(self):
+        self.db = _mk_db()
+
+    def tearDown(self):
+        self.db.close()
+
+    def test_same_day_conflict_keeps_latest_upload(self):
+        # 10-06 先传心肌酶谱（AST=58, LDH=215），后传生化（AST=59, LDH=250）
+        _ingest(self.db, "2025-10-06", ["AST", "LDH", "CK"])            # 值 1.0/2.0/3.0
+        _ingest(self.db, "2025-10-06", ["AST", "LDH", "ALT"])           # 值 1.0/2.0/3.0（后传）
+        _ingest(self.db, "2025-10-27", ["AST"])
+        rows = self.db.records_for_patient("P001")
+        self.assertEqual(len(rows), 7)                                   # 存储层全保留
+        self.assertTrue(all("id" in r and "report_id" in r for r in rows))
+
+        kept, n_dup = dedupe_same_day(rows)
+        self.assertEqual(n_dup, 2)                                       # AST、LDH 各折叠一条
+        key = {(r["indicator_code"], str(r["measured_at"])[:10]): r for r in kept}
+        self.assertEqual(len(key), len(kept))                            # 一 (指标,日) 一值
+        # 冲突指标取后传报告（report_id 更大）的那条
+        rid_later = max(r["report_id"] for r in rows
+                        if str(r["measured_at"]).startswith("2025-10-06"))
+        self.assertEqual(key[("AST", "2025-10-06")]["report_id"], rid_later)
+        self.assertEqual(key[("LDH", "2025-10-06")]["report_id"], rid_later)
+        # 非冲突项（CK 只在先传的单子里）原样保留
+        self.assertIn(("CK", "2025-10-06"), key)
+        self.assertIn(("ALT", "2025-10-06"), key)
+        # 不同日期互不影响
+        self.assertIn(("AST", "2025-10-27"), key)
+
+    def test_no_duplicates_passthrough(self):
+        _ingest(self.db, "2025-03-10", ["ALT", "AST"])
+        _ingest(self.db, "2025-06-10", ["ALT"])
+        rows = self.db.records_for_patient("P001")
+        kept, n_dup = dedupe_same_day(rows)
+        self.assertEqual((len(kept), n_dup), (3, 0))
+        self.assertEqual(kept, rows)                                     # 原序不变
+
+    def test_empty(self):
+        self.assertEqual(dedupe_same_day([]), ([], 0))
 
 
 if __name__ == "__main__":

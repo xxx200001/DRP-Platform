@@ -196,7 +196,9 @@ async function selectPatient(pid, jump) {
   state.patient = state.patients.find((p) => p.patient_id === pid) || null;
   state.trend = null; state.predicted = false; state.followedUp = false;
   state.reports = null; state.timeline = null; state.riskTimeline = null;
-  state.pending = []; state.lastPredict = null; state.batchCount = 0;
+  state.pending = []; state.lastPredict = null;
+  state.sessionIngested = 0; state.lastIngest = null;
+  const nsb = $("#nextStepBar"); if (nsb) nsb.hidden = true;
   store.set("drp.pid", pid);
 
   renderCtx();
@@ -387,6 +389,7 @@ $("#repImage").addEventListener("change", async (e) => {
   const files = [...e.target.files];
   if (!files.length) return;
   if (!state.pid) { toast("先在「患者」里选一位", true); $("#repImage").value = ""; return; }
+  cancelAutoJump();   // 用户继续上传 = 上一批的自动评估倒计时作废
 
   const btn = $("#btnOCR");
   btn.disabled = true;
@@ -435,6 +438,8 @@ $("#repImage").addEventListener("change", async (e) => {
 
 function renderPending() {
   const wrap = $("#pendingWrap"), box = $("#pendingList");
+  // 队列非空 = 正在一批之中，"下一步"条先让位
+  if (state.pending.length) { const b = $("#nextStepBar"); if (b) b.hidden = true; }
   if (!state.pending.length) { wrap.hidden = true; box.innerHTML = ""; return; }
   wrap.hidden = false;
   $("#pendingCount").textContent = `${state.pending.length} 份待确认`;
@@ -490,7 +495,8 @@ async function confirmPending(id, silent = false) {
   try {
     const r = await parseAndIngestText(it.text, it.date);
     if (!r) return false;
-    state.batchCount = (state.batchCount || 0) + 1;
+    state.sessionIngested = (state.sessionIngested || 0) + 1;
+    state.lastIngest = { name: it.name, stored: r.stored, date: it.date };
     state.pending = state.pending.filter((p) => p.id !== id);
     renderPending();
     // V3.1 用户反馈："第二张还是 17 条，不知道是不是只识别到一张"。
@@ -501,12 +507,32 @@ async function confirmPending(id, silent = false) {
             `累计 ${sum.n_reports ?? "?"} 份 / ${sum.n_stored_total ?? "?"} 条指标`);
     if (r.stored === 0)
       toast(`「${it.name}」未识别到可入库的指标，可点「查看原文」核对识别结果`, true);
-    if (!state.pending.length) {
-      const n = state.batchCount; state.batchCount = 0;
-      await afterBatchIngest(n);
-    }
+    // V3.2 上传节奏统一：单份确认【不再】自动跳页 —— "传一张看看再接着传"
+    // 不能被系统打断。队列清空后渲染"下一步"条，节奏交还用户；
+    // 只有「全部确认入库」这个明确的批量动作才走 趋势→自动评估 流程。
+    if (!state.pending.length) renderNextStepBar();
     return true;
   } catch (e) { toast(`「${it.name}」入库失败：${e.message}`, true); return false; }
+}
+
+/** 入库后的"下一步"条：累计状态 + 两个去向按钮。任何入库路径
+    （批量确认单张 / 手动粘贴 / 示例）队列空时都会到这里。 */
+function renderNextStepBar() {
+  const bar = $("#nextStepBar");
+  if (!bar) return;
+  if (state.pending.length) { bar.hidden = true; return; }
+  const sum = state.reports?.summary || {};
+  const li = state.lastIngest;
+  bar.hidden = false;
+  bar.innerHTML =
+    `<b>✓ ${li ? `刚入库「${esc(li.name)}」${li.stored} 项` : "已入库"}</b>` +
+    `<span>本次会话 ${state.sessionIngested || 0} 份 · ` +
+    `累计 ${sum.n_reports ?? "—"} 份报告 / ${sum.n_stored_total ?? "—"} 条指标</span>` +
+    `<span class="tb-ops">` +
+    `<button class="btn ghost sm" id="nsMore">继续上传</button>` +
+    `<button class="btn sm" id="nsGo">看趋势并评估 →</button></span>`;
+  $("#nsMore").onclick = () => $("#repImage").click();
+  $("#nsGo").onclick = () => startTrendThenAssess(state.sessionIngested || 1);
 }
 
 $("#btnConfirmAll").addEventListener("click", async () => {
@@ -525,14 +551,22 @@ $("#btnConfirmAll").addEventListener("click", async () => {
   btn.disabled = false;
   const sum = state.reports?.summary || {};
   toast(`批量入库完成：本次 ${ok} 份 · 累计 ${sum.n_reports ?? "?"} 份报告 / ${sum.n_stored_total ?? "?"} 条指标`);
+  // 「全部确认入库」= 用户宣告"这批传完了" → 走 趋势→自动评估。
+  // 若有入库失败的残留卡片，先让用户处理，不抢跳。
+  if (ok > 0 && !state.pending.length) startTrendThenAssess(ok);
+  else if (state.pending.length)
+    toast(`有 ${state.pending.length} 份未成功入库，处理后可点「看趋势并评估」`, true);
 });
 
-/** 批量导入完成后的收尾（V3.1 用户反馈："先要趋势，然后自动跳转到评估"）：
-    ① 跳到趋势页，让用户先看到按真实检查日期画出的指标曲线；
-    ② 顶部横幅倒计时，自动进入评估页并运行预测（可点「留在本页」取消，
-       任何手动切页也会取消 —— 自动流转不许和用户抢方向盘）。 */
-async function afterBatchIngest(nNew) {
+/** 趋势→自动评估流程（V3.1"先要趋势，然后自动跳转到评估"）。
+    V3.2 触发时机收紧：只由【全部确认入库】或用户点【看趋势并评估】发起——
+    单份确认绝不抢跳。只有一个检查日期时趋势页是空的，直接进评估并说明。 */
+async function startTrendThenAssess(nNew) {
   cancelAutoJump();
+  if ((state.timeline?.n_dates ?? 0) < 2) {
+    toast("目前只有一个检查日期，先基于单次数据评估；累计两次后即可看趋势");
+    return runAutoAssess();
+  }
   go("trend");
   await loadTrend(true);
   const sum = state.reports?.summary || {};
@@ -589,7 +623,12 @@ $("#btnSample").addEventListener("click", async () => {
     try {
       const r = await parseAndIngestText(state.meta.sample_report, $("#repDate").value);
       $("#parseStat").textContent = "";
-      if (r) toast(`示例已入库 ${r.stored} 条`);
+      if (r) {
+        state.sessionIngested = (state.sessionIngested || 0) + 1;
+        state.lastIngest = { name: "示例化验单", stored: r.stored, date: $("#repDate").value };
+        toast(`示例已入库 ${r.stored} 条`);
+        renderNextStepBar();
+      }
     } catch (e) {
       $("#parseStat").textContent = "";
       toast(e.message, true);
@@ -607,7 +646,12 @@ $("#btnParse").addEventListener("click", async () => {
   try {
     const r = await parseAndIngestText($("#repText").value, d);
     $("#parseStat").textContent = "";
-    if (r) toast(`入库 ${r.stored} 条（检查日期 ${d}）`);
+    if (r) {
+      state.sessionIngested = (state.sessionIngested || 0) + 1;
+      state.lastIngest = { name: "手动粘贴文本", stored: r.stored, date: d };
+      toast(`入库 ${r.stored} 条（检查日期 ${d}）`);
+      renderNextStepBar();
+    }
   } catch (e) {
     $("#parseStat").textContent = "";
     toast(e.message, true);
@@ -730,6 +774,9 @@ function renderTimeline() {
       <div class="stat"><div class="v">${t.n_records}</div><div class="k">有效记录</div></div>
       <div class="stat"><div class="v">${t.n_comparable_indicators}</div><div class="k">可连续比较指标</div></div>
     </div>
+    ${t.n_same_day_dedup > 0 ? `<p class="muted" style="margin:8px 0 0;font-size:12px">
+      ℹ 同一天有多张单子：${t.n_same_day_dedup} 处重复指标已按<b>最新上传</b>取值参与
+      趋势与预测；「历史化验记录」里仍完整保留每一条原始值。</p>` : ""}
     <div class="tlg-list">${groups}</div>
     <div class="divider"></div>
     ${t.longitudinal_ready
@@ -958,7 +1005,8 @@ function renderPredict(r) {
 
   $("#predBasis").textContent = ctx.n_reports != null
     ? `预测依据：${ym(ctx.first_date)}—${ym(ctx.last_date)} 期间 ${ctx.n_reports} 份检查报告 · ` +
-      `${ctx.n_dates} 个检查时间点 · 共 ${ctx.n_comparable_indicators} 项可连续比较指标（有效记录 ${ctx.n_records} 条）`
+      `${ctx.n_dates} 个检查时间点 · 共 ${ctx.n_comparable_indicators} 项可连续比较指标（有效记录 ${ctx.n_records} 条` +
+      (ctx.n_same_day_dedup > 0 ? `；同日重复指标 ${ctx.n_same_day_dedup} 处已按最新上传取值` : "") + `）`
     : "";
 
   selectHorizon(state.selHorizon || "3y");

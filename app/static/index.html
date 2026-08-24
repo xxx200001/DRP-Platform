@@ -6,7 +6,7 @@
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#0f1a17">
 <title>病情预测平台</title>
-<link rel="stylesheet" href="/app.css?v=3.1">
+<link rel="stylesheet" href="/app.css?v=3.2">
 <script src="/vendor/echarts.min.js"></script>
 </head>
 <body>
@@ -133,6 +133,9 @@
           </div>
           <div id="pendingList"></div>
         </div>
+
+        <!-- V3.2：入库后的"下一步"条 —— 单份确认不再强制跳页，节奏由用户掌控 -->
+        <div class="nextstep" id="nextStepBar" hidden></div>
 
         <details style="margin-top:12px" id="detailsManualText">
           <summary style="font-size:12.5px;color:var(--ink-3);cursor:pointer;user-select:none;margin-bottom:8px">或展开手动粘贴文本</summary>
@@ -474,6 +477,6 @@
 </dialog>
 
 <div id="toast" role="status" aria-live="polite"></div>
-<script src="/app.js?v=3.1"></script>
+<script src="/app.js?v=3.2"></script>
 </body>
 </html>

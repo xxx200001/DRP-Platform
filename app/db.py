@@ -133,6 +133,35 @@ PROFILE_COLUMNS: dict[str, str] = {
 }
 
 
+def dedupe_same_day(rows: list[dict]) -> tuple[list[dict], int]:
+    """
+    【分析层】同日重复指标去重（V3.2）。
+
+    真实场景：同一天做了两张单子（心肌酶谱 + 生化 32 项），AST/LDH 等指标
+    各出现一次且数值不同（不同管血/不同仪器）。存储层照旧逐份独立保留
+    （核查项 1 不动摇）；但趋势 / 特征 / 预测若同时吃进两个值：
+      · "本次 vs 上次"会变成同一天自己比自己；
+      · 时序斜率遇到 Δt=0。
+    因此参与分析的口径统一为：同一 (indicator_code, 检查日) 只取
+    【最后入库的一条】（lab_records.id 最大 —— 用户后传的报告代表更新
+    的认知，且与"重新识别覆盖旧结果"的语义一致）。
+
+    输入 rows 需含 id 字段（records_for_patient 已提供），按原序返回
+    (去重后的行, 被折叠条数)。纯函数、零依赖，可离线单测。
+    """
+    if not rows:
+        return rows, 0
+    best: dict[tuple, dict] = {}
+    for r in rows:
+        key = (r["indicator_code"], str(r["measured_at"])[:10])
+        cur = best.get(key)
+        if cur is None or r.get("id", 0) >= cur.get("id", 0):
+            best[key] = r
+    kept_ids = {id(v) for v in best.values()}
+    kept = [r for r in rows if id(r) in kept_ids]
+    return kept, len(rows) - len(kept)
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
@@ -246,8 +275,8 @@ class AppDB:
 
     def records_for_patient(self, patient_id: str) -> list[dict]:
         rows = self.conn.execute(
-            """SELECT indicator_code, value, unit, measured_at, status
-               FROM lab_records WHERE patient_id=? ORDER BY measured_at""",
+            """SELECT id, report_id, indicator_code, value, unit, measured_at, status
+               FROM lab_records WHERE patient_id=? ORDER BY measured_at, id""",
             (patient_id,),
         ).fetchall()
         return [dict(r) for r in rows]
