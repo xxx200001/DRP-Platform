@@ -198,7 +198,7 @@ async function selectPatient(pid, jump) {
   state.reports = null; state.timeline = null; state.riskTimeline = null;
   state.pending = []; state.lastPredict = null;
   state.sessionIngested = 0; state.lastIngest = null;
-  const nsb = $("#nextStepBar"); if (nsb) nsb.hidden = true;
+  const nsb = $("#nextStepBar"); if (nsb) { nsb.hidden = true; nsb.innerHTML = ""; }
   store.set("drp.pid", pid);
 
   renderCtx();
