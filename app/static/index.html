@@ -6,7 +6,7 @@
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#0f1a17">
 <title>病情预测平台</title>
-<link rel="stylesheet" href="/app.css?v=3.3">
+<link rel="stylesheet" href="/app.css?v=3.4">
 <script src="/vendor/echarts.min.js"></script>
 </head>
 <body>
@@ -134,7 +134,7 @@
           <div id="pendingList"></div>
         </div>
 
-        <!-- V3.2：入库后的"下一步"条 —— 单份确认不再强制跳页，节奏由用户掌控 -->
+        <!-- V3.4 流程卡：入库后在原地给出下一步（查看趋势 / 风险评估），零自动跳转 -->
         <div class="nextstep" id="nextStepBar" hidden></div>
 
         <details style="margin-top:12px" id="detailsManualText">
@@ -171,6 +171,14 @@
         <div id="reportTable"></div>
       </div>
 
+      <div class="card" id="sec-records">
+        <header>
+          <h2>历史化验记录</h2>
+          <span class="note" id="recordsNote"></span>
+        </header>
+        <div class="scroller" id="recordList"></div>
+      </div>
+
       <!-- STEP 2：数据确认 · 健康时间轴 -->
       <div class="card" id="sec-timeline">
         <header>
@@ -180,14 +188,6 @@
         <div id="timelineBox">
           <div class="empty"><b>还没有可确认的数据</b>先在上面导入至少一份历史报告</div>
         </div>
-      </div>
-
-      <div class="card" id="sec-records">
-        <header>
-          <h2>历史化验记录</h2>
-          <span class="note" id="recordsNote"></span>
-        </header>
-        <div class="scroller" id="recordList"></div>
       </div>
 
       <!-- STEP 3：纵向风险预测 -->
@@ -334,7 +334,7 @@
       <h1 class="title">趋势追踪</h1>
       <p class="lede">单次指标不准，趋势才准。本页所有曲线横轴都是<b>真实检查日期</b>；「模型当时的判断」（按预测时间的审计走势）在管理台复盘。</p>
 
-      <!-- V3.1 流程：入库完成 → 先到本页看趋势 → 倒计时自动进入风险评估 -->
+      <!-- V3.4 引导条（静态·可关闭）：由「查看趋势」按钮带入，看完一键进评估 -->
       <div class="trend-banner" id="trendAutoBanner" hidden></div>
 
       <div class="card">
@@ -502,6 +502,6 @@
 </dialog>
 
 <div id="toast" role="status" aria-live="polite"></div>
-<script src="/app.js?v=3.3"></script>
+<script src="/app.js?v=3.4"></script>
 </body>
 </html>

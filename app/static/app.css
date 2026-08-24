@@ -889,3 +889,23 @@ details.fold > summary:hover { color: var(--ink); }
   border-left:3px solid var(--line);background:var(--paper-2);border-radius:0 8px 8px 0}
 .ai-para{margin:0 0 10px;line-height:1.75}
 .ai-para:last-child{margin-bottom:0}
+
+/* ================= V3.4 · 向导式流程 ================= */
+
+/* 步骤条可点击（点击滚动到对应区块） */
+.step { cursor: pointer; user-select: none; transition: transform .12s ease; }
+.step:hover { transform: translateY(-1px); }
+.step:active { transform: translateY(0); }
+
+/* 流程卡：提示语单独一行，按钮组右对齐；窄屏自动换行 */
+.nextstep { row-gap: 6px; }
+.nextstep .fc-hint {
+  flex-basis: 100%; font-size: 12.5px; color: var(--ink-3);
+}
+
+/* 时间轴就绪后的双按钮行 */
+.cta-row { display: flex; gap: 10px; }
+.cta-row .btn { flex: 1; }
+
+/* 趋势页引导条关闭键 */
+.trend-banner #tgClose { padding-inline: 10px; }

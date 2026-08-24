@@ -110,8 +110,8 @@ const tierColor = (tier) => token("--t" + (TIER_IDX[tier] || 1));
 
 /* ---------------- 导航 ---------------- */
 function go(page) {
-  // 自动流转倒计时进行中，用户任何手动切页都视为接管，取消自动跳转
-  if (state.autoTimer && !state._autoNav) cancelAutoJump();
+  // V3.4：手动离开趋势页即视为看完，收起引导条（不打扰后续浏览）
+  if (page !== "trend") hideTrendGuide();
   $$(".navbtn").forEach((b) => b.setAttribute("aria-current", String(b.dataset.go === page)));
   $$(".page").forEach((p) => p.classList.toggle("on", p.id === "page-" + page));
   window.scrollTo({ top: 0, behavior: "instant" });
@@ -191,7 +191,7 @@ function age(birth) {
 }
 
 async function selectPatient(pid, jump) {
-  cancelAutoJump();               // 切换患者必须终止上一位的自动评估倒计时
+  hideTrendGuide();               // 切换患者：上一位的流程引导全部作废
   state.pid = pid;
   state.patient = state.patients.find((p) => p.patient_id === pid) || null;
   state.trend = null; state.predicted = false; state.followedUp = false;
@@ -391,7 +391,6 @@ $("#repImage").addEventListener("change", async (e) => {
   const files = [...e.target.files];
   if (!files.length) return;
   if (!state.pid) { toast("先在「患者」里选一位", true); $("#repImage").value = ""; return; }
-  cancelAutoJump();   // 用户继续上传 = 上一批的自动评估倒计时作废
 
   const btn = $("#btnOCR");
   btn.disabled = true;
@@ -515,29 +514,103 @@ async function confirmPending(id, silent = false) {
     // V3.2 上传节奏统一：单份确认【不再】自动跳页 —— "传一张看看再接着传"
     // 不能被系统打断。队列清空后渲染"下一步"条，节奏交还用户；
     // 只有「全部确认入库」这个明确的批量动作才走 趋势→自动评估 流程。
-    if (!state.pending.length) renderNextStepBar();
+    if (!state.pending.length) renderFlowCard();
     return true;
   } catch (e) { toast(`「${it.name}」入库失败：${e.message}`, true); return false; }
 }
 
 /** 入库后的"下一步"条：累计状态 + 两个去向按钮。任何入库路径
     （批量确认单张 / 手动粘贴 / 示例）队列空时都会到这里。 */
-function renderNextStepBar() {
+/* ================================================================
+   向导式流程（V3.4 重构）
+   ----------------------------------------------------------------
+   原则：零定时器、零自动传送。每个环节完成后，在【原地】出现一张
+   流程卡，用明确的按钮把用户带向下一步；所有页面切换都由用户按出来。
+   V3.1~V3.3 的三套跳转机制（倒计时横幅 / 下一步条 / 时间轴滚动按钮）
+   在此合并为两个组件——功能一个不少，路径只剩一条：
+     · renderFlowCard()      评估页·入库区下方的"下一步"流程卡
+     · renderTrendGuide()    趋势页顶部的引导条（仅引导路径可见，可关）
+   主线：导入 → (流程卡) → 查看趋势(可选) → (引导条) → 风险评估 → 跟踪
+   ================================================================ */
+
+/** 进入趋势页的"引导模式"：带着任务去看趋势，看完一键回来评估。 */
+function goTrendGuided() {
+  state.guideTrend = true;
+  go("trend");
+  renderTrendGuide();
+}
+
+/** 进入评估并立刻运行预测（时间轴按钮 / 流程卡 / 趋势引导条共用）。 */
+async function startAssessNow() {
+  hideTrendGuide();
+  go("work");
+  $("#sec-predict").scrollIntoView({ behavior: "smooth", block: "start" });
+  await doPredict({ fromGuide: true });
+}
+
+/** 评估页·入库区下方的流程卡：说清"现在到哪了 + 下一步去哪"。 */
+function renderFlowCard() {
   const bar = $("#nextStepBar");
   if (!bar) return;
-  if (state.pending.length) { bar.hidden = true; return; }
+  if (state.pending.length || !(state.sessionIngested || 0)) {
+    bar.hidden = true; bar.innerHTML = ""; return;
+  }
   const sum = state.reports?.summary || {};
   const li = state.lastIngest;
-  bar.hidden = false;
-  bar.innerHTML =
+  const nDates = state.timeline?.n_dates ?? 0;
+  const predicted = state.predicted || !!state.patient?.last_predicted_at;
+
+  const status =
     `<b>✓ ${li ? `刚入库「${esc(li.name)}」${li.stored} 项` : "已入库"}</b>` +
     `<span>本次会话 ${state.sessionIngested || 0} 份 · ` +
-    `累计 ${sum.n_reports ?? "—"} 份报告 / ${sum.n_stored_total ?? "—"} 条指标</span>` +
+    `累计 ${sum.n_reports ?? "—"} 份报告 / ${sum.n_stored_total ?? "—"} 条指标</span>`;
+
+  let hint = "", primary = "", secondary =
+    `<button class="btn ghost sm" id="fcMore">继续上传</button>`;
+  if (nDates >= 2 && !predicted) {
+    hint = `已覆盖 ${nDates} 个检查日期，可以看趋势了`;
+    primary = `<button class="btn sm" id="fcTrend">下一步：查看趋势 →</button>`;
+    secondary += `<button class="btn ghost sm" id="fcAssess">跳过，直接评估</button>`;
+  } else if (nDates >= 2 && predicted) {
+    hint = `检测到新数据，重新评估会自动与上次比较（改善/稳定/升高）`;
+    primary = `<button class="btn sm" id="fcAssess">重新评估并与上次比较 →</button>`;
+    secondary += `<button class="btn ghost sm" id="fcTrend">查看趋势</button>`;
+  } else {
+    hint = `目前只有 ${nDates || 1} 个检查日期——单次数据也能评估；` +
+           `补充另一日期的报告后可看趋势`;
+    primary = `<button class="btn sm" id="fcAssess">下一步：风险评估 →</button>`;
+  }
+  bar.hidden = false;
+  bar.innerHTML = status +
+    `<span class="fc-hint">${hint}</span>` +
+    `<span class="tb-ops">${secondary}${primary}</span>`;
+  const on = (id, fn) => { const b = $(id); if (b) b.onclick = fn; };
+  on("#fcMore", () => $("#repImage").click());
+  on("#fcTrend", goTrendGuided);
+  on("#fcAssess", startAssessNow);
+}
+
+/** 趋势页顶部引导条（静态、可关闭；只在"带任务看趋势"时出现）。 */
+function renderTrendGuide() {
+  const b = $("#trendAutoBanner");
+  if (!b) return;
+  if (!state.guideTrend) { b.hidden = true; b.innerHTML = ""; return; }
+  const sum = state.reports?.summary || {};
+  b.hidden = false;
+  b.innerHTML =
+    `<b>✓ 数据已就绪</b><span>共 ${sum.n_reports ?? "—"} 份报告，` +
+    `以下曲线均按真实检查日期绘制；浏览完成后进入风险评估。</span>` +
     `<span class="tb-ops">` +
-    `<button class="btn ghost sm" id="nsMore">继续上传</button>` +
-    `<button class="btn sm" id="nsGo">看趋势并评估 →</button></span>`;
-  $("#nsMore").onclick = () => $("#repImage").click();
-  $("#nsGo").onclick = () => startTrendThenAssess(state.sessionIngested || 1);
+    `<button class="btn sm" id="tgAssess">继续：风险评估 →</button>` +
+    `<button class="btn ghost sm" id="tgClose" title="关闭引导">✕</button></span>`;
+  $("#tgAssess").onclick = startAssessNow;
+  $("#tgClose").onclick = hideTrendGuide;
+}
+
+function hideTrendGuide() {
+  state.guideTrend = false;
+  const b = $("#trendAutoBanner");
+  if (b) { b.hidden = true; b.innerHTML = ""; }
 }
 
 $("#btnConfirmAll").addEventListener("click", async () => {
@@ -556,67 +629,10 @@ $("#btnConfirmAll").addEventListener("click", async () => {
   btn.disabled = false;
   const sum = state.reports?.summary || {};
   toast(`批量入库完成：本次 ${ok} 份 · 累计 ${sum.n_reports ?? "?"} 份报告 / ${sum.n_stored_total ?? "?"} 条指标`);
-  // 「全部确认入库」= 用户宣告"这批传完了" → 走 趋势→自动评估。
-  // 若有入库失败的残留卡片，先让用户处理，不抢跳。
-  if (ok > 0 && !state.pending.length) startTrendThenAssess(ok);
-  else if (state.pending.length)
-    toast(`有 ${state.pending.length} 份未成功入库，处理后可点「看趋势并评估」`, true);
+  // V3.4：不再自动跳页——下一步在流程卡里，由用户按出来
+  if (state.pending.length)
+    toast(`有 ${state.pending.length} 份未成功入库，处理后可在下方流程卡选择下一步`, true);
 });
-
-/** 趋势→自动评估流程（V3.1"先要趋势，然后自动跳转到评估"）。
-    V3.2 触发时机收紧：只由【全部确认入库】或用户点【看趋势并评估】发起——
-    单份确认绝不抢跳。只有一个检查日期时趋势页是空的，直接进评估并说明。 */
-async function startTrendThenAssess(nNew) {
-  cancelAutoJump();
-  if ((state.timeline?.n_dates ?? 0) < 2) {
-    toast("目前只有一个检查日期，先基于单次数据评估；累计两次后即可看趋势");
-    return runAutoAssess();
-  }
-  go("trend");
-  await loadTrend(true);
-  const sum = state.reports?.summary || {};
-  const banner = $("#trendAutoBanner");
-  let left = 8;
-  const text = () =>
-    `<b>✓ 本次入库 ${nNew} 份</b> · 累计 ${sum.n_reports ?? "—"} 份报告 / ` +
-    `${sum.n_stored_total ?? "—"} 条指标。先看看各指标的历史趋势，` +
-    `<b>${left}</b> 秒后自动进入风险评估。` +
-    `<span class="tb-ops"><button class="btn sm" id="tbGoNow">立即评估</button>` +
-    `<button class="btn ghost sm" id="tbStay">留在本页</button></span>`;
-  banner.hidden = false;
-  banner.innerHTML = text();
-  const bind = () => {
-    $("#tbGoNow").onclick = () => runAutoAssess();
-    $("#tbStay").onclick = () => cancelAutoJump(true);
-  };
-  bind();
-  state.autoTimer = setInterval(() => {
-    left -= 1;
-    if (left <= 0) return runAutoAssess();
-    banner.innerHTML = text();
-    bind();
-  }, 1000);
-}
-
-function cancelAutoJump(byUser = false) {
-  if (state.autoTimer) { clearInterval(state.autoTimer); state.autoTimer = null; }
-  const b = $("#trendAutoBanner");
-  if (b) {
-    if (byUser) {
-      b.innerHTML = `已留在趋势页。看完随时可去评估页点「运行纵向风险分析」。`;
-      setTimeout(() => { b.hidden = true; }, 4000);
-    } else b.hidden = true;
-  }
-}
-
-async function runAutoAssess() {
-  cancelAutoJump();
-  state._autoNav = true;
-  go("work");
-  state._autoNav = false;
-  $("#sec-predict").scrollIntoView({ behavior: "smooth", block: "start" });
-  await doPredict({ fromAuto: true });
-}
 
 /* ---------------- 填充示例 ---------------- */
 $("#btnSample").addEventListener("click", async () => {
@@ -632,7 +648,7 @@ $("#btnSample").addEventListener("click", async () => {
         state.sessionIngested = (state.sessionIngested || 0) + 1;
         state.lastIngest = { name: "示例化验单", stored: r.stored, date: $("#repDate").value };
         toast(`示例已入库 ${r.stored} 条`);
-        renderNextStepBar();
+        renderFlowCard();
       }
     } catch (e) {
       $("#parseStat").textContent = "";
@@ -655,7 +671,7 @@ $("#btnParse").addEventListener("click", async () => {
       state.sessionIngested = (state.sessionIngested || 0) + 1;
       state.lastIngest = { name: "手动粘贴文本", stored: r.stored, date: d };
       toast(`入库 ${r.stored} 条（检查日期 ${d}）`);
-      renderNextStepBar();
+      renderFlowCard();
     }
   } catch (e) {
     $("#parseStat").textContent = "";
@@ -786,11 +802,16 @@ function renderTimeline() {
     <div class="divider"></div>
     ${t.longitudinal_ready
       ? `<p class="ready-line">✓ 数据已具备纵向趋势分析条件（${esc(t.first_date)} — ${esc(t.last_date)}）</p>
-         <button class="btn block" id="btnGoPredict">开始风险预测</button>`
+         <div class="cta-row">
+           <button class="btn ghost" id="btnTlTrend">查看趋势</button>
+           <button class="btn" id="btnGoPredict">开始风险预测</button>
+         </div>`
       : `<p class="ready-line warn">⚠ 目前只有 ${t.n_dates} 个检查时间点；补充不同日期的报告后才能做纵向趋势分析（单次数据仍可预测，但没有趋势特征）。</p>
          <button class="btn ghost block" id="btnGoPredict">仍要基于单次数据预测</button>`}`;
-  $("#btnGoPredict").addEventListener("click", () =>
-    $("#sec-predict").scrollIntoView({ behavior: "smooth", block: "start" }));
+  // V3.4：按钮即行动——「开始风险预测」直接运行，不再只滚动到区块让用户再点一次
+  $("#btnGoPredict").addEventListener("click", () => startAssessNow());
+  const tlTrend = $("#btnTlTrend");
+  if (tlTrend) tlTrend.addEventListener("click", () => goTrendGuided());
 }
 
 function renderParse(r) {
@@ -858,9 +879,9 @@ async function getPrevRiskProb() {
   return null;
 }
 
-/** 运行一次风险预测（改动 V3.1：手动点击与"趋势页倒计时自动评估"共用）。
-    fromAuto 只影响文案；比较逻辑：只要存在上一次预测就自动给出 改善/稳定/升高。 */
-async function doPredict({ fromAuto = false } = {}) {
+/** 运行一次风险预测（V3.4：手动按钮 / 时间轴CTA / 流程卡 / 趋势引导条共用）。
+    fromGuide 只影响文案；比较逻辑：只要存在上一次预测就自动给出 改善/稳定/升高。 */
+async function doPredict({ fromGuide = false } = {}) {
   if (!state.pid) { toast("先在「患者」里选一位", true); return; }
   const btn = $("#btnPredict");
   btn.disabled = true;
@@ -883,7 +904,9 @@ async function doPredict({ fromAuto = false } = {}) {
     renderFollowupPlain();
     renderLifestyle().catch(() => {});   // ④ 摘要异步补上，不阻塞预测结果展示
     updateSteps();
-    if (fromAuto) toast("已基于全部历史数据完成本次风险评估");
+    hideTrendGuide();
+    renderFlowCard();
+    if (fromGuide) toast("已基于全部历史数据完成本次风险评估");
   } catch (e) {
     $("#predStat").textContent = "";
     toast(e.message, true);
