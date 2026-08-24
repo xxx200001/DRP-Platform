@@ -382,9 +382,9 @@ def build_state(app_data: str | Path) -> ServerState:
     if not development_only and "合成" in note:
         development_only = True  # 注册表 notes 里钉着的那句话就是判据
     state.model_card = {
-        "endpoint_label": "综合心血管代谢及慢病相关风险进展",
+        "endpoint_label": "全身多系统综合健康风险进展",
         "endpoint_detail": (
-            "各时程概率 = 模型估计的「未来 N 年内发生综合慢病事件」的校准概率。"
+            "各时程概率 = 模型估计的「未来 N 年内发生多系统慢病事件」的校准概率。"
             "由该患者全部历史检查数据经真实特征管线（含时序趋势特征）计算得出。"
         ),
         "development_only": development_only,
