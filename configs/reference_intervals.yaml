@@ -242,7 +242,7 @@ indicators:
 
   TG:
     name_cn: 甘油三酯
-    aliases: [TG, TRIG, 甘油三酯, 三酰甘油]
+    aliases: [TG, TRIG, 甘油三酯, 甘油三脂, 三酰甘油]
     canonical_unit: mmol/L
     unit_conversions: { "mg/dL": 0.01129 }
     plausible_range: [0.1, 60]
@@ -493,3 +493,192 @@ indicators:
     cv_intra: 0.03
     reference:
       - { sex: ANY, age: [18, 120], lower: 18.5, upper: 23.9 }
+
+  # =========================================================================
+  # V3.3 增补：接入真实化验单（德清县武康健康保健集团临检中心样张 8 份）后
+  # 发现的缺口。这些指标此前【未注册】，导致 OCR 再准也无法入库 ——
+  # 用户反馈"很多指标识别不了"的第二个根因（第一个是 OCR 走错引擎）。
+  #
+  # 区间来源同上：WS/T 404 系列 + 全国临床检验操作规程(第4版)，并与样张
+  # 打印区间交叉核对（样张为浙江省德清县人民医院，成年女性 25 岁）。
+  # 上线前同样必须由合作医院检验科出具的本院区间覆盖。
+  # =========================================================================
+
+  # ------------------------- 电解质补充 -------------------------
+  CL:
+    name_cn: 血氯
+    aliases: [CL, "Cl-", 氯, 血氯, 氯离子, 血清氯]
+    canonical_unit: mmol/L
+    plausible_range: [60, 160]
+    magnitude_fix: false
+    critical: { low: 80, high: 125 }
+    cv_intra: 0.012
+    reference:
+      - { sex: ANY, age: [18, 120], lower: 99, upper: 110 }
+
+  P:
+    name_cn: 无机磷
+    aliases: [P, "P3+", 无机磷, 血磷, 磷]
+    canonical_unit: mmol/L
+    plausible_range: [0.1, 6]
+    magnitude_fix: false
+    cv_intra: 0.081
+    reference:
+      - { sex: ANY, age: [18, 120], lower: 0.85, upper: 1.51 }
+
+  # ------------------------- 肝功能补充 -------------------------
+  TBA:
+    name_cn: 总胆汁酸
+    aliases: [TBA, 总胆汁酸, 胆汁酸, 血清总胆汁酸]
+    canonical_unit: umol/L
+    plausible_range: [0, 500]
+    grade_multiplier: { mild: 1.0, moderate: 3.0, severe: 10.0 }
+    cv_intra: 0.35
+    log_transform: true
+    reference:
+      - { sex: ANY, age: [18, 120], lower: 0, upper: 10 }
+
+  IBIL:
+    name_cn: 间接胆红素
+    aliases: [IBIL, IBil, "I-BIL", 间接胆红素, 非结合胆红素, 未结合胆红素]
+    canonical_unit: umol/L
+    plausible_range: [0, 500]
+    grade_multiplier: { mild: 1.0, moderate: 2.0, severe: 4.0 }
+    cv_intra: 0.20
+    reference:
+      - { sex: ANY, age: [18, 120], lower: 3.0, upper: 14.0 }
+
+  GLB:
+    name_cn: 球蛋白
+    aliases: [GLB, Glb, 球蛋白, 血清球蛋白]
+    canonical_unit: g/L
+    plausible_range: [5, 100]
+    cv_intra: 0.056
+    reference:
+      - { sex: ANY, age: [18, 120], lower: 20.0, upper: 40.0 }
+
+  AGR:
+    name_cn: 白球比率
+    aliases: [AGR, "A/G", "A:G", 白球比率, 白球比值, 白蛋白球蛋白比值]
+    canonical_unit: ratio
+    plausible_range: [0.1, 10]
+    magnitude_fix: false
+    cv_intra: 0.06
+    reference:
+      - { sex: ANY, age: [18, 120], lower: 1.2, upper: 2.4 }
+
+  LAP:
+    name_cn: 亮氨酰氨基肽酶
+    aliases: [LAP, 亮氨酰氨基肽酶, 亮氨酸氨基肽酶]
+    canonical_unit: U/L
+    plausible_range: [0, 500]
+    grade_multiplier: { mild: 1.0, moderate: 2.0, severe: 4.0 }
+    cv_intra: 0.10
+    reference:
+      - { sex: ANY, age: [18, 120], lower: 0, upper: 40 }
+
+  # ------------------------- 心肌酶谱 -------------------------
+  LDH:
+    name_cn: 乳酸脱氢酶
+    aliases: [LDH, "LDH-L", 乳酸脱氢酶, 乳酸脱氢酶LDH]
+    canonical_unit: U/L
+    plausible_range: [0, 5000]
+    grade_multiplier: { mild: 1.0, moderate: 2.0, severe: 4.0 }
+    cv_intra: 0.085
+    reference:
+      - { sex: ANY, age: [18, 120], lower: 120, upper: 250 }
+
+  CK:
+    name_cn: 肌酸激酶
+    aliases: [CK, CPK, 肌酸激酶, 肌酸磷酸激酶]
+    canonical_unit: U/L
+    plausible_range: [0, 50000]
+    critical: { high: 5000 }
+    grade_multiplier: { mild: 1.0, moderate: 3.0, severe: 10.0 }
+    cv_intra: 0.227
+    log_transform: true
+    reference:
+      - { sex: M, age: [18, 120], lower: 50, upper: 310 }
+      - { sex: F, age: [18, 120], lower: 40, upper: 200 }
+
+  CKMB:
+    name_cn: 肌酸激酶同工酶
+    aliases: [CKMB, "CK-MB", "CK-MB质量", 肌酸激酶同工酶, 肌酸激酶同功酶, 肌激酶同工酶]
+    canonical_unit: U/L
+    plausible_range: [0, 2000]
+    critical: { high: 100 }
+    grade_multiplier: { mild: 1.0, moderate: 2.0, severe: 4.0 }
+    cv_intra: 0.20
+    log_transform: true
+    reference:
+      - { sex: ANY, age: [18, 120], lower: 0, upper: 25 }
+
+  # ------------------------- 胰腺 / 肾小管 -------------------------
+  AMY:
+    name_cn: 淀粉酶
+    aliases: [AMY, AMS, 淀粉酶, 血淀粉酶, 血清淀粉酶]
+    canonical_unit: U/L
+    plausible_range: [0, 10000]
+    critical: { high: 500 }
+    grade_multiplier: { mild: 1.0, moderate: 3.0, severe: 10.0 }
+    cv_intra: 0.089
+    log_transform: true
+    reference:
+      - { sex: ANY, age: [18, 120], lower: 35, upper: 135 }
+
+  RBP:
+    name_cn: 视黄醇结合蛋白
+    aliases: [RBP, RBP4, 视黄醇结合蛋白]
+    canonical_unit: mg/L
+    plausible_range: [0, 500]
+    cv_intra: 0.13
+    reference:
+      - { sex: ANY, age: [18, 120], lower: 20.0, upper: 70.0 }
+
+  # ------------------------- 免疫全套 -------------------------
+  IGG:
+    name_cn: 免疫球蛋白G
+    aliases: [IGG, IgG, 免疫球蛋白G, 免疫球蛋白IgG]
+    canonical_unit: g/L
+    plausible_range: [0.5, 80]
+    cv_intra: 0.046
+    reference:
+      - { sex: ANY, age: [18, 120], lower: 6.50, upper: 16.00 }
+
+  IGA:
+    name_cn: 免疫球蛋白A
+    aliases: [IGA, IgA, 免疫球蛋白A, 免疫球蛋白IgA]
+    canonical_unit: g/L
+    plausible_range: [0.05, 30]
+    cv_intra: 0.056
+    reference:
+      - { sex: ANY, age: [18, 120], lower: 0.40, upper: 3.50 }
+
+  IGM:
+    name_cn: 免疫球蛋白M
+    aliases: [IGM, IgM, 免疫球蛋白M, 免疫球蛋白IgM]
+    canonical_unit: g/L
+    plausible_range: [0.05, 20]
+    cv_intra: 0.059
+    reference:
+      - { sex: ANY, age: [18, 120], lower: 0.50, upper: 3.00 }
+
+  C3:
+    name_cn: 补体C3
+    aliases: [C3, 补体C3, 补体3]
+    canonical_unit: mg/dL
+    unit_conversions: { "g/L": 100.0, "mg/dl": 1.0, "mg/L": 0.1 }
+    plausible_range: [5, 500]
+    cv_intra: 0.052
+    reference:
+      - { sex: ANY, age: [18, 120], lower: 79.0, upper: 152.0 }
+
+  C4:
+    name_cn: 补体C4
+    aliases: [C4, 补体C4, 补体4]
+    canonical_unit: mg/dL
+    unit_conversions: { "g/L": 100.0, "mg/dl": 1.0, "mg/L": 0.1 }
+    plausible_range: [1, 200]
+    cv_intra: 0.087
+    reference:
+      - { sex: ANY, age: [18, 120], lower: 16.0, upper: 38.0 }

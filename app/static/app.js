@@ -421,6 +421,7 @@ $("#repImage").addEventListener("change", async (e) => {
         rot: ocr.rotation || 0,
         layout: ocr.layout || "single",
         nred: ocr.n_redacted || 0,
+        engine: ocr.engine || "",
       });
       renderPending();
     } catch (err) {
@@ -447,6 +448,8 @@ function renderPending() {
     <div class="pend" data-pend="${p.id}">
       <div class="pend-head">
         <span class="pend-name" title="${esc(p.name)}">${esc(p.name)}</span>
+        ${p.engine === "vision" ? `<span class="tag t1">AI 视觉识别</span>`
+          : p.engine === "rapidocr" ? `<span class="tag line">本地 OCR</span>` : ""}
         ${p.rot ? `<span class="tag cool">已自动转正 ${p.rot}°</span>` : ""}
         ${p.layout === "two_panel" ? `<span class="tag line">双栏已逐行拆分</span>` : ""}
         ${p.nred ? `<span class="tag line">已脱敏 ${p.nred} 处</span>` : ""}

@@ -71,6 +71,21 @@ _FLAG_HL_END = re.compile(r"(?<![A-Za-z0-9/^])[HL]\s*$")
 #: 数值 token（此时千分位逗号、OCR 句号小数点已在预处理阶段修复）
 _NUMBER = re.compile(r"\d+(?:\.\d+)?")
 
+#: V3.3 独立数值 token：前面必须是行首/空白/冒号，即【不与字母粘连】。
+#: 起因：C3、C4、CA125、维生素B12 这类指标名自带数字，旧逻辑 _NUMBER.search
+#: 会把名字里的 "3" 当成结果值（C3 152.9 → 值=3，整行报废）。
+#: 策略是"优先独立 token，没有再退回旧行为" —— 保住 "白细胞计数6.5x10^9/L"
+#: 这种名值粘连格式（文件头声明支持）的解析能力。
+_NUMBER_STANDALONE = re.compile(r"(?:(?<=\s)|(?<=[:：])|^)(\d+(?:\.\d+)?)")
+
+
+def _find_value(text: str) -> re.Match | None:
+    """在文本中定位结果值：优先独立数值 token，退化时用第一个数字。"""
+    m = _NUMBER_STANDALONE.search(text)
+    if m is not None:
+        return m
+    return _NUMBER.search(text)
+
 #: 单位 token：数值后紧跟的计量单位。字符集覆盖 10^9/L、×10^12/L、mmHg、
 #: kg/m2、μmol/L、%、mIU/L、/HP 等。最长 14 字符，防止把后续文字吞进来。
 _UNIT_AFTER_VALUE = re.compile(
@@ -292,19 +307,19 @@ class LabReportParser:
         paren = re.search(r"[(（\[【]([A-Za-zμµ0-9%/·\s\-+]+)[)）\]】]", line)
         if paren and any(c.isalpha() for c in paren.group(1)):
             after_paren = line[paren.end():]
-            vm = _NUMBER.search(after_paren)
+            vm = _find_value(after_paren)
             if vm:
-                value = float(vm.group(0))
+                value = float(vm.group(vm.lastindex or 0))
                 name_region = paren.group(0)
                 rest = after_paren[vm.end():]
             else:
-                vm = _NUMBER.search(line)
-                value = float(vm.group(0))
+                vm = _find_value(line)
+                value = float(vm.group(vm.lastindex or 0))
                 name_region = line[: vm.start()].strip(" :：·").rstrip("(（")
                 rest = line[vm.end():]
         else:
-            vm = _NUMBER.search(line)
-            value = float(vm.group(0))
+            vm = _find_value(line)
+            value = float(vm.group(vm.lastindex or 0))
             name_region = line[: vm.start()].strip(" :：·").rstrip("(（")
             rest = line[vm.end():]
 
@@ -472,6 +487,10 @@ def _preprocess(raw: str) -> str:
     # 第一个数字就是序号本身（值=1），整行报废。只在后随非数字内容时移除，
     # "4.07 mmol/L"这类以真实数值开头的行不受影响。
     s = re.sub(r"^\s*\d{1,3}\s+(?=[^\d\s.,，-])", "", s)
+    # V3.3：浙江省检验结果互认标识前缀（"HR丙氨酸氨基转移酶"、"*HR谷氨酰转肽酶"）。
+    # 它是行政标记不是指标名的一部分，不剥离会导致整行词典失配。
+    # 仅当其后紧跟中文/字母（真指标名）时才剥，避免误伤 HR 开头的正常词。
+    s = re.sub(r"^[*＊]?\s*HR\s*(?=[\u4e00-\u9fa5A-Za-z])", "", s, flags=re.I)
     s = re.sub(r"^[\[\(\（【][HL↑↓+ -]+[\]\)\）】]\s*", "", s)  # 移除开头的 [H] 等标记
     s = to_halfwidth(s)
     s = s.replace("×", "x")
