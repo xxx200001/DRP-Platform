@@ -1477,9 +1477,10 @@ def _ai_vision_ocr_extract(image_b64: str) -> list:
             "x-api-key": api_key,
             "anthropic-version": "2023-06-01",
             "content-type": "application/json",
+            "User-Agent": "SoulHealth-DRP/3.2",
         }
         req_body = {
-            "model": os.environ.get("VISION_MODEL", "claude-sonnet-4-20250514"),
+            "model": os.environ.get("VISION_MODEL", "claude-sonnet-4-6"),
             "max_tokens": 2048,
             "messages": [
                 {
