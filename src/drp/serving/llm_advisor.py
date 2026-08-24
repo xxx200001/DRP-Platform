@@ -23,7 +23,7 @@ def _call_openai_compatible(
     model: str,
     prompt: str,
     system_prompt: str,
-    timeout: int = 15,
+    timeout: float = 2.0,
 ) -> str | None:
     """调用兼容 OpenAI 规范的大模型接口 (如 DeepSeek, OpenAI, 通义千问, SiliconFlow 等)"""
     url = base_url.rstrip("/") + "/chat/completions"
@@ -38,7 +38,7 @@ def _call_openai_compatible(
             {"role": "user", "content": prompt},
         ],
         "temperature": 0.3,
-        "max_tokens": 2000,
+        "max_tokens": 1500,
     }
     try:
         req = urllib.request.Request(
@@ -52,7 +52,7 @@ def _call_openai_compatible(
             content = data["choices"][0]["message"]["content"]
             return content.strip()
     except Exception as e:
-        logger.warning("[LLM] OpenAI-compatible API error: %s", str(e))
+        logger.info("[LLM] 外部在线接口不可用 (%s)，毫秒级切换至内置专家模型", str(e))
         return None
 
 
@@ -62,7 +62,7 @@ def _call_anthropic(
     model: str,
     prompt: str,
     system_prompt: str,
-    timeout: int = 15,
+    timeout: float = 2.0,
 ) -> str | None:
     """调用 Anthropic Claude 规范接口"""
     url = base_url.rstrip("/") + "/v1/messages"
@@ -75,7 +75,7 @@ def _call_anthropic(
         "model": model,
         "system": system_prompt,
         "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 2000,
+        "max_tokens": 1500,
     }
     try:
         req = urllib.request.Request(
@@ -89,7 +89,7 @@ def _call_anthropic(
             content = data["content"][0]["text"]
             return content.strip()
     except Exception as e:
-        logger.warning("[LLM] Anthropic API error: %s", str(e))
+        logger.info("[LLM] 外部 Claude 接口不可用 (%s)，毫秒级切换至内置专家模型", str(e))
         return None
 
 

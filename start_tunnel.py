@@ -17,6 +17,12 @@ import webbrowser
 import subprocess
 from pathlib import Path
 
+# 确保在 Windows 控制台或管道输出时 UTF-8 正常显示
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
+
 PORT = 8000
 LOCAL_URL = f"http://127.0.0.1:{PORT}"
 ROOT_DIR = Path(__file__).resolve().parent
@@ -162,15 +168,21 @@ def main():
             break
 
     if tunnel_url:
-        print("\n" + "=" * 64)
-        print(" 🎉 穿透成功！手机与外网均可直接访问：")
-        print("=" * 64)
-        print(f"  📱 手机/公网访问地址:  {tunnel_url}")
-        print(f"  💻 电脑本地访问地址:    {LOCAL_URL}")
-        print(f"  📖 API 接口文档:        {tunnel_url}/docs")
-        print("=" * 64)
-        print("说明：手机使用任意网络打开上方链接，即可拍照/上传相册化验单并进行预测。")
-        print("=" * 64 + "\n")
+        # 保存公网 URL 到本地文件
+        try:
+            (ROOT_DIR / "tunnel_url.txt").write_text(tunnel_url, encoding="utf-8")
+        except Exception:
+            pass
+
+        print("\n" + "=" * 64, flush=True)
+        print(" 🎉 穿透成功！手机与外网均可直接访问：", flush=True)
+        print("=" * 64, flush=True)
+        print(f"  📱 手机/公网访问地址:  {tunnel_url}", flush=True)
+        print(f"  💻 电脑本地访问地址:    {LOCAL_URL}", flush=True)
+        print(f"  📖 API 接口文档:        {tunnel_url}/docs", flush=True)
+        print("=" * 64, flush=True)
+        print("说明：手机使用任意网络打开上方链接，即可拍照/上传相册化验单并进行预测。", flush=True)
+        print("=" * 64 + "\n", flush=True)
 
         # 尝试输出终端二维码
         try:

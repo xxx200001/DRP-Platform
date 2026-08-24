@@ -154,14 +154,51 @@ class ReportIn(BaseModel):
     measured_at: str
 
 
+class ReportDateIn(BaseModel):
+    measured_at: str
+
+
 class PredictIn(BaseModel):
     patient_id: str
+    # 本次最关注的问题（改版·改动 2）。只影响结果页的【回答顺序】——
+    # 后台永远全身扫描，concern 不裁剪任何分析。
+    # 可选值: liver / cardio / glucose / renal / other / all（None 视同 all）
+    concern: str | None = None
     # 采血登记（规范 2.4 生理状态）。描述的是【本次预测时点】的状态，
     # 属于每次就诊的登记项而非患者档案 —— 妊娠/空腹会变，所以随请求传，
     # 不落 patients 表。None = 未登记（特征层不产出该项，与"否"严格区分）。
     non_fasting: bool | None = None
     strenuous_exercise: bool | None = None
     pregnancy: bool | None = None
+
+
+# ---------------------------------------------------------------------------
+# 展示层分组与关注点映射（改版·改动 2/3）
+# 仅用于时间轴统计与"风险总览"的口语化归类；临床科室推荐仍由
+# ReferralEngine 的规则表负责，两者读者不同、允许粒度不同。
+# ---------------------------------------------------------------------------
+_TIMELINE_GROUPS: dict[str, tuple[str, ...]] = {
+    "血脂": ("TG", "TC", "LDLC", "HDLC"),
+    "肝功能": ("ALT", "AST", "GGT", "TBIL", "ALB"),
+    "肾功能": ("CREA", "UREA", "UA", "UACR"),
+    "血糖": ("GLU", "HBA1C", "INS"),
+    "血压": ("SBP", "DBP"),
+    "血常规": ("PLT", "HGB", "WBC"),
+    "炎症指标": ("CRP",),
+    "体格": ("BMI",),
+}
+
+#: concern 值 -> ReferralEngine 的指标组名（items[].group）
+_CONCERN_TO_GROUPS: dict[str, tuple[str, ...]] = {
+    "liver": ("肝功能",),
+    "cardio": ("血脂", "血压"),
+    "glucose": ("血糖代谢",),
+    "renal": ("肾功能", "电解质"),
+}
+_CONCERN_LABEL: dict[str, str] = {
+    "liver": "肝脏", "cardio": "心血管", "glucose": "血糖代谢",
+    "renal": "肾脏", "other": "其他", "all": "全面分析",
+}
 
 
 class FeedbackIn(BaseModel):
@@ -202,6 +239,11 @@ class ServerState:
     services: dict[tuple[str, str], RiskPredictionService] = field(default_factory=dict)
     tier_schemes: dict[str, RiskTierScheme] = field(default_factory=dict)
     monitors: dict[str, DriftMonitor] = field(default_factory=dict)
+    # 模型卡（改版·核查项 4）：预测终点与"是否演示模型"必须能被展示层读到。
+    model_card: dict = field(default_factory=dict)
+    # 回溯风险时间轴缓存：key=(pid, n_records, last_measured_at)。
+    # 数据一变 key 就变，天然失效；单机 demo 规模无需 LRU。
+    risk_timeline_cache: dict = field(default_factory=dict)
 
     # ------------------------------------------------------------------
     def ensure_version_loaded(self, version: str) -> None:
@@ -299,6 +341,41 @@ def build_state(app_data: str | Path) -> ServerState:
     canary = registry.get_canary()
     if canary is not None:
         state.ensure_version_loaded(canary.version)
+
+    # ------------------------------------------------------------------
+    # 模型卡（核查项 4：1Y/3Y/5Y 到底预测什么，必须能说清楚）。
+    # 概率本身是真实 LightGBM+等渗校准输出（非硬编码），但当前 ACTIVE 若是
+    # 开发自举版本，训练数据为【合成纵向病历】、结局为合成综合慢病事件 ——
+    # 界面必须明确标注"演示模型/非临床验证"，不允许包装成疾病发生概率。
+    development_only = False
+    note = active.notes or ""
+    meta_path = app_data / "bootstrap_meta.json"
+    if meta_path.exists():
+        try:
+            import json
+            bmeta = json.loads(meta_path.read_text(encoding="utf-8"))
+            if bmeta.get("version") == active.version:
+                development_only = bool(bmeta.get("development_only", False))
+                note = bmeta.get("note", note)
+        except Exception:  # 模型卡是展示信息，读取失败不阻断服务
+            logger.warning("bootstrap_meta.json 读取失败，模型卡按注册表 notes 兜底")
+    if not development_only and "合成" in note:
+        development_only = True  # 注册表 notes 里钉着的那句话就是判据
+    state.model_card = {
+        "endpoint_label": "综合心血管代谢及慢病相关风险进展",
+        "endpoint_detail": (
+            "各时程概率 = 模型估计的「未来 N 年内发生综合慢病事件」的校准概率。"
+            "由该患者全部历史检查数据经真实特征管线（含时序趋势特征）计算得出。"
+        ),
+        "development_only": development_only,
+        "development_note": (
+            "当前为演示模型：训练数据为合成纵向病历，概率为统计演示值，"
+            "未经过真实临床队列验证，不代表真实疾病发生概率。"
+            if development_only else ""
+        ),
+        "model_version": active.version,
+        "attribution_method": "TreeSHAP（按指标聚合，仅输出排序与方向）",
+    }
     return state
 
 
@@ -384,6 +461,8 @@ def build_server(app_data: str | Path):
                 "history": HISTORY_FIELDS,
                 "family_history": FAMILY_HISTORY_FIELDS,
             },
+            # 模型卡（核查项 4）：预测终点 + 演示模型标识，展示层必须原样呈现
+            "model_card": st.model_card,
         }
 
     # ---------------- 患者 ----------------
@@ -521,6 +600,7 @@ def build_server(app_data: str | Path):
                 0, preport.n_review, preport.n_unmatched,
             )
 
+        st.risk_timeline_cache.clear()
         return {
             "report_id": report_id,
             "stored": stored,
@@ -528,6 +608,267 @@ def build_server(app_data: str | Path):
             "cleaning_summary": cleaning_summary,
             "rows": [r.to_log_dict() for r in rows],
         }
+
+    # ---------------- 报告管理（改版·改动 1：8 份报告逐份可见、可管理） ----------------
+    def _report_or_404(report_id: int) -> dict:
+        rep = st.db.get_report(report_id)
+        if rep is None:
+            raise HTTPException(404, f"报告 {report_id} 不存在")
+        return rep
+
+    @app.get("/api/patients/{pid}/reports")
+    def list_reports(pid: str):
+        """
+        该患者的历史检查资料清单 + 累计状态。
+        summary 用于渲染「已上传 N 份报告｜YYYY.MM—YYYY.MM｜识别 X 条指标」。
+        列表按【真实检查日期】排序（核查项 3），不按上传时间。
+        """
+        _patient_or_404(pid)
+        reports = st.db.list_reports(pid)
+        dates = [str(r["measured_at"])[:10] for r in reports if r.get("measured_at")]
+        return {
+            "reports": reports,
+            "summary": {
+                "n_reports": len(reports),
+                "n_stored_total": int(sum(r["n_stored"] for r in reports)),
+                "first_date": min(dates) if dates else None,
+                "last_date": max(dates) if dates else None,
+            },
+        }
+
+    @app.get("/api/reports/{report_id}")
+    def get_report(report_id: int):
+        """查看报告原文（OCR/粘贴文本）。原始图片有意不落库：图片含姓名等明文
+        PII，与规范 1.2 冲突；可回看的是已过 scan_pii 的识别文本。"""
+        rep = _report_or_404(report_id)
+        return {
+            "id": rep["id"], "patient_id": rep["patient_id"],
+            "measured_at": rep["measured_at"], "created_at": rep["created_at"],
+            "raw_text": rep["raw_text"],
+            "n_ingested": rep["n_ingested"], "n_review": rep["n_review"],
+            "n_unmatched": rep["n_unmatched"],
+        }
+
+    @app.patch("/api/reports/{report_id}")
+    def update_report_date(report_id: int, body: ReportDateIn):
+        """修改检查日期。DB 层保证报告与其名下全部指标记录的 measured_at 联动。"""
+        _report_or_404(report_id)
+        try:
+            ts = pd.Timestamp(body.measured_at)
+        except Exception as e:
+            raise HTTPException(422, f"measured_at 无法解析: {e}") from e
+        if ts > pd.Timestamp(datetime.now(timezone.utc).date()) + pd.Timedelta(days=1):
+            raise HTTPException(422, "检查日期不能晚于今天")
+        st.db.update_report_date(report_id, str(ts))
+        st.risk_timeline_cache.clear()
+        return {"id": report_id, "measured_at": str(ts)}
+
+    @app.delete("/api/reports/{report_id}")
+    def delete_report(report_id: int):
+        _report_or_404(report_id)
+        n = st.db.delete_report(report_id)
+        st.risk_timeline_cache.clear()
+        return {"deleted": report_id, "records_removed": n}
+
+    @app.post("/api/reports/{report_id}/reparse")
+    def reparse_report(report_id: int):
+        """重新识别：对已入库的原文重新走解析+清洗管线（词典/解析器升级后使用），
+        替换该报告名下的指标记录；检查日期保持不变。"""
+        rep = _report_or_404(report_id)
+        patient = _patient_or_404(rep["patient_id"])
+        measured_at = pd.Timestamp(rep["measured_at"])
+        frame, preport, rows = parse_lab_text(
+            rep["raw_text"], st.ref, patient_id=rep["patient_id"], measured_at=measured_at
+        )
+        st.db.clear_report_records(report_id)
+        stored = 0
+        if not frame.empty:
+            cleaned, _ = st.cleaner.clean(frame, demographics=_demo_frame(patient))
+            stored = st.db.insert_lab_records([
+                {
+                    "patient_id": rep["patient_id"],
+                    "indicator_code": r[COL_INDICATOR],
+                    "value": float(r[COL_VALUE]),
+                    "unit": str(r[COL_UNIT]),
+                    "measured_at": str(r[COL_MEASURED_AT]),
+                    "status": int(r[COL_STATUS]),
+                    "report_id": report_id,
+                }
+                for _, r in cleaned.iterrows()
+            ])
+        st.db.update_report_counts(
+            report_id, preport.n_ingested, preport.n_review, preport.n_unmatched
+        )
+        st.risk_timeline_cache.clear()
+        return {
+            "report_id": report_id, "stored": stored,
+            "parse": preport.to_log_dict(),
+            "rows": [r.to_log_dict() for r in rows],
+        }
+
+    # ---------------- 健康时间轴（改版·改动 1：上传完先"数据确认"再预测） ----------------
+    @app.get("/api/patients/{pid}/timeline")
+    def patient_timeline(pid: str):
+        """
+        「已建立个人健康时间轴」的数据确认视图：
+        数据跨度 / 报告数 / 有效记录数 / 可连续比较指标数 / 各系统时间点覆盖。
+        全部按【真实检查日期】统计（核查项 3）。
+        """
+        _patient_or_404(pid)
+        reports = st.db.list_reports(pid)
+        rows = st.db.records_for_patient(pid)
+        dates = sorted({str(r["measured_at"])[:10] for r in rows})
+        by_code_dates: dict[str, set] = {}
+        for r in rows:
+            by_code_dates.setdefault(r["indicator_code"], set()).add(
+                str(r["measured_at"])[:10]
+            )
+        comparable = sorted(
+            c for c, ds in by_code_dates.items() if len(ds) >= 2
+        )
+        groups = []
+        for gname, codes in _TIMELINE_GROUPS.items():
+            gdates: set = set()
+            for c in codes:
+                gdates |= by_code_dates.get(c, set())
+            if gdates:
+                groups.append({
+                    "group": gname,
+                    "n_timepoints": len(gdates),
+                    "codes_present": [c for c in codes if c in by_code_dates],
+                })
+        groups.sort(key=lambda g: -g["n_timepoints"])
+
+        span_days = 0
+        span_label = "—"
+        if len(dates) >= 2:
+            span_days = int(
+                (pd.Timestamp(dates[-1]) - pd.Timestamp(dates[0])).days
+            )
+            yy, rem = divmod(span_days, 365)
+            mm = round(rem / 30.44)
+            if mm == 12:
+                yy, mm = yy + 1, 0
+            span_label = (f"{yy}年" if yy else "") + (f"{mm}个月" if mm else "")
+            span_label = span_label or "不足1个月"
+
+        return {
+            "n_reports": len(reports),
+            "n_records": len(rows),
+            "n_dates": len(dates),
+            "first_date": dates[0] if dates else None,
+            "last_date": dates[-1] if dates else None,
+            "span_days": span_days,
+            "span_label": span_label,
+            "n_comparable_indicators": len(comparable),
+            "comparable_indicators": comparable,
+            "groups": groups,
+            # 纵向趋势分析的门槛：至少两个真实检查时间点
+            "longitudinal_ready": len(dates) >= 2,
+        }
+
+    # ---------------- 回溯风险时间轴（改版·改动 5/6：X 轴 = 真实检查日期） ----------------
+    @app.get("/api/patients/{pid}/risk-timeline")
+    def patient_risk_timeline(pid: str):
+        """
+        按【真实检查日期】回溯计算的历史风险轨迹：对每个检查时间点 t，仅用
+        measured_at <= t 的记录、以 t 为索引日重跑真实特征管线并推理。
+
+        与审计走势（trend.risk_trajectory_from_audit，按预测发生时间）的分工：
+          · 审计走势回答"模型当时怎么判断"，用于复盘，保留在管理/随访链路；
+          · 本视图回答"随着一次次体检，风险如何演变"，X 轴是检查日期 ——
+            正是核查项 3 与改动 5 要求的用户侧曲线。
+        本视图是派生分析，不写审计、不产生 trace，因此直接走 bank.predict_risk
+        而不是 RiskPredictionService（后者的审计落盘是不可分割路径）。
+        """
+        patient = _patient_or_404(pid)
+        recs = _records_frame(pid)
+        if recs.empty:
+            return {"points": [], "basis": "retrospective_current_model",
+                    "model_version": None, "note": "暂无化验记录"}
+
+        cache_key = (pid, int(len(recs)), str(recs[COL_MEASURED_AT].max()))
+        cached = st.risk_timeline_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        try:
+            decision = st.router.decide(pid)
+            version = decision.version
+        except RegistryError:
+            active = st.registry.get_active()
+            if active is None:
+                raise HTTPException(503, "注册表中没有 ACTIVE 版本")
+            version = active.version
+        st.ensure_version_loaded(version)
+        bank = st.banks[version]
+        manifest = bank.models[st.horizons[0]].manifest
+
+        meds = st.db.medications_for_patient(pid)
+        medications = (
+            pd.DataFrame([{
+                COL_PATIENT_ID: pid,
+                "medication_name": m["medication_name"],
+                "start_date": m["start_date"],
+                "end_date": m["end_date"],
+            } for m in meds])
+            if meds else None
+        )
+
+        exam_dates = sorted(recs[COL_MEASURED_AT].dt.normalize().unique())
+        # 单机 demo 保护：时间点极多时等距抽稀，但首末两点必须保留
+        max_points = 16
+        if len(exam_dates) > max_points:
+            idx = np.linspace(0, len(exam_dates) - 1, max_points).round().astype(int)
+            exam_dates = [exam_dates[i] for i in sorted(set(idx.tolist()))]
+
+        points = []
+        for d in exam_dates:
+            d = pd.Timestamp(d)
+            sub = recs[recs[COL_MEASURED_AT] <= d + pd.Timedelta(hours=23, minutes=59)]
+            if sub.empty:
+                continue
+            cohort_row = {
+                COL_PATIENT_ID: patient["patient_id"],
+                COL_INDEX_DATE: d,
+                COL_SEX: patient["sex"],
+                COL_BIRTH_DATE: pd.Timestamp(patient["birth_date"]),
+            }
+            for col in PROFILE_COLUMNS:
+                cohort_row[col] = patient.get(col)
+            cohort = pd.DataFrame([cohort_row])
+            try:
+                X = st.pipeline.transform(
+                    cohort, sub, medications=medications, manifest=manifest
+                )
+            except Exception as e:  # 单点失败不拖垮整条时间轴
+                logger.warning("[risk-timeline] %s@%s 特征失败: %s", pid, d.date(), e)
+                continue
+            horizons_out = {}
+            for h in st.horizons:
+                p = float(bank.models[h].predict_risk(X)[0])
+                horizons_out[h] = {
+                    "probability": p,
+                    "risk_tier": st.tier_schemes[h].assign(p),
+                }
+            points.append({
+                "at": str(d.date()),
+                "n_records_used": int(len(sub)),
+                "horizons": horizons_out,
+            })
+
+        payload = {
+            "basis": "retrospective_current_model",
+            "model_version": version,
+            "points": points,
+            "note": (
+                "历史轨迹为按各检查日期、仅用该日期之前数据、以当前模型回溯计算；"
+                "属派生分析视图，不写入审计与随访链路。"
+                "「模型当时的判断」请看管理台的审计走势。"
+            ),
+        }
+        st.risk_timeline_cache[cache_key] = payload
+        return payload
 
     # ---------------- 预测（真实特征管线 -> 灰度路由 -> 多时程服务） ----------------
     @app.post("/api/predict")
@@ -618,12 +959,116 @@ def build_server(app_data: str | Path):
             recs, demographics=_demo_frame(patient), risk_tier=tier_for_referral
         )
 
+        # -------- 风险总览（改动 3）：先给优先级排序，再平铺科室 --------
+        # 排序沿用 ReferralEngine 的临床优先级（priority + 最大分级），
+        # 每一项都补上"为什么排这里"：涉及指标、当前分级、较上次的真实变化方向。
+        comparisons = {
+            c.code: c for c in st.trend.compare_latest(
+                recs, demographics=_demo_frame(patient)
+            )
+        }
+        rank_labels = ["首要关注", "第二关注", "第三关注"]
+        overview_items = []
+        for i, it in enumerate(advice.items):
+            inds = []
+            for f in it.findings:
+                comp = comparisons.get(f.code)
+                trend_txt = None
+                if comp is not None:
+                    if comp.is_real_change:
+                        trend_txt = comp.direction + ("·较上次加重" if comp.worsened else "")
+                    else:
+                        trend_txt = "较上次平稳"
+                inds.append({
+                    "code": f.code, "name_cn": f.name_cn,
+                    "value": f.value, "unit": f.unit, "grade": f.grade,
+                    "trend": trend_txt,
+                    "worsened": bool(comp.worsened) if comp else False,
+                })
+            why_bits = [f"{len(inds)} 项相关指标异常"]
+            n_worse = sum(1 for x in inds if x["worsened"])
+            if n_worse:
+                why_bits.append(f"其中 {n_worse} 项较上次真实恶化")
+            overview_items.append({
+                "rank": i + 1,
+                "rank_label": rank_labels[i] if i < 3 else "需要留意",
+                "group": it.group,
+                "department": it.department,
+                "priority": int(it.priority),
+                "priority_label": it.priority.label_cn(),
+                "indicators": inds,
+                "why": "、".join(why_bits),
+                "checkups": list(it.checkups),
+            })
+        # "目前相对稳定"：有数据、且未触发任何异常建议的系统。
+        # 组名口径对齐：Referral 的"血糖代谢"/"体重管理"映射到展示组名。
+        abnormal_groups = {it.group for it in advice.items}
+        present_codes = set(recs[COL_INDICATOR].unique())
+        _alias = {"血糖代谢": "血糖", "体重管理": "体格"}
+        abnormal_display = {_alias.get(g, g) for g in abnormal_groups}
+        stable_groups = [
+            g for g, codes in _TIMELINE_GROUPS.items()
+            if (set(codes) & present_codes) and g not in abnormal_display
+        ]
+
+        # -------- 本次最关注的问题（改动 2）：先回答用户关注，再报额外发现 --------
+        concern = (body.concern or "all").lower()
+        concern_groups = _CONCERN_TO_GROUPS.get(concern, ())
+        concern_items = [x for x in overview_items if x["group"] in concern_groups]
+        if concern in ("all", "other") or not concern_groups:
+            concern_answer = None
+        elif concern_items:
+            concern_answer = {
+                "status": "abnormal",
+                "items": [x["rank"] for x in concern_items],
+                "text": (
+                    f"你关注的「{_CONCERN_LABEL.get(concern, concern)}」方向"
+                    f"存在需要关注的异常，详见下方第 "
+                    f"{'、'.join(str(x['rank']) for x in concern_items)} 项。"
+                ),
+            }
+        else:
+            concern_answer = {
+                "status": "normal",
+                "items": [],
+                "text": (
+                    f"你关注的「{_CONCERN_LABEL.get(concern, concern)}」方向：本次已入库的"
+                    f"相关指标未见明显异常；系统同时完成了全身各系统扫描，"
+                    f"额外发现见下方总览。"
+                ),
+            }
+
+        # -------- 预测依据（改动 4）：数据范围 + 预测终点 + 演示标识 --------
+        reports = st.db.list_reports(body.patient_id)
+        exam_dates = sorted({str(x)[:10] for x in recs[COL_MEASURED_AT]})
+        by_code_dates: dict[str, set] = {}
+        for _, rr in recs.iterrows():
+            by_code_dates.setdefault(rr[COL_INDICATOR], set()).add(str(rr[COL_MEASURED_AT])[:10])
+        n_comparable = sum(1 for ds in by_code_dates.values() if len(ds) >= 2)
+        prediction_context = {
+            "n_reports": len(reports),
+            "n_records": int(len(recs)),
+            "n_dates": len(exam_dates),
+            "first_date": exam_dates[0] if exam_dates else None,
+            "last_date": exam_dates[-1] if exam_dates else None,
+            "n_comparable_indicators": int(n_comparable),
+            **st.model_card,
+        }
+
         return {
             "patient_id": body.patient_id,
             "model_version": decision.version,
             "arm": decision.arm,
+            "concern": concern,
+            "concern_label": _CONCERN_LABEL.get(concern, concern),
+            "concern_answer": concern_answer,
             "results": results,
             "monotonic_note": monotonic_note,
+            "risk_overview": {
+                "items": overview_items,
+                "stable_groups": stable_groups,
+            },
+            "prediction_context": prediction_context,
             "referral": advice.to_dict(),
         }
 
@@ -633,8 +1078,11 @@ def build_server(app_data: str | Path):
         patient = _patient_or_404(pid)
         recs = _records_frame(pid)
         pseudo = st.audit.pseudonymize(pid)
+        # recent_n=24：指标曲线要能画出用户上传的【全部】真实检查时间点
+        # （改动 5"近3次曲线 → 指标历史趋势"），时间范围筛选交给前端。
         report = build_trend_report(
             st.trend, recs, demographics=_demo_frame(patient),
+            recent_n=24,
             audit=st.audit, pseudo_id=pseudo, horizons=tuple(st.horizons),
         )
         data = report.to_dict()
@@ -772,15 +1220,75 @@ def build_server(app_data: str | Path):
         )
 
         lines = [l.strip() for l in extracted_text.splitlines() if l.strip()]
+        detected = _detect_report_date(extracted_text)
         return {
             "text": extracted_text,
             "count": len(lines),
+            # 改版需求：上传报告 → OCR 识别 → 「识别到检查日期：xxxx」确认/修改；
+            # 识别不出（None）时前端再让用户填写。
+            "detected_date": detected[0],
+            "detected_date_source": detected[1],
         }
 
     # ---------------- 前端静态托管（必须最后挂载，避免吞掉 /api） ----------------
     static_dir = Path(__file__).resolve().parent / "static"
     app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
     return app
+
+
+#: 报告日期识别的关键词行（优先级从高到低）。化验单上通常同时印有
+#: 采集时间/接收时间/报告时间；对"这份数据属于哪一天"而言，采样/采集
+#: 时间最接近真实检验时点，报告时间次之。
+_DATE_LINE_KEYWORDS = ("采样", "采集", "抽血", "送检", "检验日期", "报告", "审核", "日期", "时间")
+
+
+def _detect_report_date(text: str) -> tuple[str | None, str | None]:
+    """
+    从 OCR 文本里识别真实检查日期。返回 (ISO 日期 | None, 命中说明 | None)。
+
+    识别不到就老老实实返回 None 让用户填 —— 宁可让用户确认一次，
+    也不能把错误日期悄悄写进时间轴（核查项 3 的反面教材就是时间字段错）。
+    """
+    import re as _re
+
+    if not text:
+        return None, None
+    today = datetime.now(timezone.utc).date()
+    pat = _re.compile(
+        r"(20\d{2})\s*[年./\-]\s*(\d{1,2})\s*[月./\-]\s*(\d{1,2})\s*日?"
+    )
+
+    def _valid(y: int, m: int, d: int):
+        try:
+            dt = date(y, m, d)
+        except ValueError:
+            return None
+        if dt.year < 2000 or dt > today:
+            return None
+        return dt
+
+    keyword_hits: list[tuple[date, str]] = []
+    any_hits: list[date] = []
+    for line in text.splitlines():
+        for m in pat.finditer(line):
+            dt = _valid(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+            if dt is None:
+                continue
+            any_hits.append(dt)
+            for kw in _DATE_LINE_KEYWORDS:
+                if kw in line:
+                    keyword_hits.append((dt, kw))
+                    break
+    if keyword_hits:
+        # 关键词行内取最早出现的高优先关键词；同优先级取最大日期（末次时间戳）
+        best_kw_rank = min(_DATE_LINE_KEYWORDS.index(k) for _, k in keyword_hits)
+        cands = [d for d, k in keyword_hits
+                 if _DATE_LINE_KEYWORDS.index(k) == best_kw_rank]
+        pick = max(cands)
+        return pick.isoformat(), f"识别自「{_DATE_LINE_KEYWORDS[best_kw_rank]}」行"
+    if any_hits:
+        return max(any_hits).isoformat(), "识别自文本中的日期"
+    return None, None
 
 
 _rapid_ocr_engine = None

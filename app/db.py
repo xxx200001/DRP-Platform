@@ -252,6 +252,71 @@ class AppDB:
         ).fetchall()
         return [dict(r) for r in rows]
 
+    # ------------------------------------------------------------------ 报告管理（改版·改动 1）
+    # 需求：用户连续上传 7-8 份报告后，必须能看到"每一份都独立入库、没有覆盖"，
+    # 并且可以逐份 查看原文 / 修改检查日期 / 删除 / 重新识别。
+    # 注意：本表【有意】不存原始图片 —— 化验单图片上通常印有姓名等明文 PII，
+    # 与规范 1.2 冲突；可回看的是已过 scan_pii 的 OCR/粘贴文本（raw_text）。
+    def list_reports(self, patient_id: str) -> list[dict]:
+        """该患者全部报告（按真实检查日期 measured_at 升序），附每份实际入库指标数。"""
+        rows = self.conn.execute(
+            """SELECT r.id, r.measured_at, r.created_at,
+                      r.n_ingested, r.n_review, r.n_unmatched,
+                      (SELECT COUNT(*) FROM lab_records l WHERE l.report_id = r.id) AS n_stored
+               FROM reports r WHERE r.patient_id=?
+               ORDER BY r.measured_at, r.id""",
+            (patient_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_report(self, report_id: int) -> dict | None:
+        row = self.conn.execute(
+            "SELECT * FROM reports WHERE id=?", (report_id,)
+        ).fetchone()
+        return dict(row) if row else None
+
+    def update_report_date(self, report_id: int, measured_at: str) -> None:
+        """
+        修改一份报告的真实检查日期。必须【同事务】联动它名下所有 lab_records 的
+        measured_at —— 趋势/时间轴/纵向特征全部按 lab_records.measured_at 计算，
+        只改 reports 表会造成两处时间对不上（正是本次核查项 3 要杜绝的问题）。
+        """
+        self.conn.execute(
+            "UPDATE reports SET measured_at=? WHERE id=?", (measured_at, report_id)
+        )
+        self.conn.execute(
+            "UPDATE lab_records SET measured_at=? WHERE report_id=?",
+            (measured_at, report_id),
+        )
+        self.conn.commit()
+
+    def delete_report(self, report_id: int) -> int:
+        """删除报告及其名下全部指标记录。返回删除的指标记录数。"""
+        cur = self.conn.execute(
+            "DELETE FROM lab_records WHERE report_id=?", (report_id,)
+        )
+        n = cur.rowcount
+        self.conn.execute("DELETE FROM reports WHERE id=?", (report_id,))
+        self.conn.commit()
+        return int(n)
+
+    def clear_report_records(self, report_id: int) -> int:
+        """清空一份报告名下的指标记录（重新识别前调用），报告行保留。"""
+        cur = self.conn.execute(
+            "DELETE FROM lab_records WHERE report_id=?", (report_id,)
+        )
+        self.conn.commit()
+        return int(cur.rowcount)
+
+    def update_report_counts(
+        self, report_id: int, n_ingested: int, n_review: int, n_unmatched: int
+    ) -> None:
+        self.conn.execute(
+            "UPDATE reports SET n_ingested=?, n_review=?, n_unmatched=? WHERE id=?",
+            (n_ingested, n_review, n_unmatched, report_id),
+        )
+        self.conn.commit()
+
     # ------------------------------------------------------------------ 用药（规范 2.4）
     def add_medication(
         self, patient_id: str, medication_name: str,

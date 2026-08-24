@@ -245,4 +245,3 @@ class ModelRegistry:
 
     def to_dict(self) -> dict[str, dict]:
         return {name: self._info(raw).to_dict() for name, raw in self._read()["versions"].items()}
-

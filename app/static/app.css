@@ -605,3 +605,178 @@ dialog .actions { display: flex; gap: 9px; justify-content: flex-end; margin-top
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+/* =====================================================================
+   v3 改版新增（改动 1-8）：批量导入 / 报告管理 / 健康时间轴 / 风险总览 /
+   未来预测块 / 人话随访 / 检查时间轴条 / AI Top3 / 折叠长文本
+   —— 全部沿用既有 token；饱和色仍只表示风险分层。
+   ===================================================================== */
+
+.steps.four { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 560px) { .steps.four { grid-template-columns: repeat(2, 1fr); } }
+.push { margin-left: auto; }
+
+.blocktitle { font: 700 15px/1.4 var(--sans); margin: 14px 0 10px; letter-spacing: .01em; }
+
+/* ---- 选择型 chips（关注点 / 时程 / 时间范围） ---- */
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  border: 1px solid var(--line); background: var(--surface-2); color: var(--ink-2);
+  border-radius: 999px; padding: 6px 14px; font: 500 13px/1.2 var(--sans);
+  cursor: pointer; transition: border-color .12s, color .12s, background .12s;
+}
+.chip:hover { border-color: var(--ink-3); }
+.chip.on { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+
+/* ---- 批量上传：待确认卡 ---- */
+.pend {
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--surface-2); padding: 10px 12px; margin-bottom: 8px;
+}
+.pend-head { display: flex; align-items: baseline; gap: 10px; }
+.pend-name {
+  font: 600 13.5px/1.4 var(--sans);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%;
+}
+.pend-date { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.pend-date input[type="date"] {
+  padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--surface); color: var(--ink); font: 500 13px var(--sans);
+}
+
+/* ---- 我的历史检查资料 ---- */
+.rep-summary { font-size: 14px; color: var(--ink-2); margin-bottom: 10px; }
+.rep-summary b { color: var(--ink); }
+.rep-row {
+  display: grid; grid-template-columns: 150px 64px 76px 100px 1fr;
+  gap: 8px; align-items: center;
+  padding: 8px 4px; border-bottom: 1px solid var(--line-2); font-size: 13px;
+}
+.rep-row.rep-head { color: var(--ink-3); font-size: 12px; border-bottom: 1px solid var(--line); }
+.rep-row .num { text-align: right; font-variant-numeric: tabular-nums; }
+.rep-date input[type="date"] {
+  width: 100%; padding: 5px 6px; border: 1px solid transparent; border-radius: 8px;
+  background: transparent; color: var(--ink); font: 500 13px var(--sans);
+}
+.rep-date input[type="date"]:hover,
+.rep-date input[type="date"]:focus { border-color: var(--line); background: var(--surface); }
+.rep-ops { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+.mini {
+  border: 1px solid var(--line); background: transparent; color: var(--ink-2);
+  border-radius: 8px; padding: 3px 9px; font: 500 12px var(--sans); cursor: pointer;
+}
+.mini:hover { border-color: var(--ink-3); color: var(--ink); }
+.mini.danger:hover { border-color: var(--t4); color: var(--t4); }
+@media (max-width: 640px) {
+  .rep-row { grid-template-columns: 130px 1fr 70px; }
+  .rep-row.rep-head span:nth-child(n+4), .rep-row > span:nth-child(4) { display: none; }
+  .rep-row .rep-ops { grid-column: 1 / -1; justify-content: flex-start; }
+}
+
+/* ---- 健康时间轴（数据确认） ---- */
+.tl-done { font-size: 15px; margin-bottom: 12px; }
+.tlg-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; margin-top: 12px; }
+.tlg {
+  display: flex; align-items: center; gap: 8px; font-size: 13px;
+  border: 1px solid var(--line-2); border-radius: var(--radius-sm);
+  background: var(--surface-2); padding: 8px 10px;
+}
+.tlg-ic { color: var(--t1); font-weight: 700; }
+.tlg.warn .tlg-ic { color: var(--t2); }
+.ready-line { font-size: 13.5px; color: var(--t1); margin: 0 0 12px; font-weight: 600; }
+.ready-line.warn { color: var(--t2); }
+
+/* ---- 演示模型标识（核查项 4） ---- */
+.demo-banner {
+  margin-top: 14px; border: 1px solid var(--t2); background: var(--t2-bg);
+  color: var(--t2); border-radius: var(--radius-sm);
+  padding: 9px 12px; font-size: 12.5px; line-height: 1.55;
+}
+
+/* ---- 风险总览（改动 3） ---- */
+.concern-answer {
+  border-radius: var(--radius-sm); padding: 10px 12px; margin-bottom: 12px;
+  font-size: 13.5px; line-height: 1.6;
+}
+.concern-answer.warn { background: var(--t3-bg); color: var(--t3); }
+.concern-answer.ok { background: var(--t1-bg); color: var(--t1); }
+.ov-item {
+  border: 1px solid var(--line); border-left-width: 3px;
+  border-radius: var(--radius-sm); padding: 10px 12px; margin-bottom: 10px;
+  background: var(--surface-2);
+}
+.ov-item.p1 { border-left-color: var(--t4); }
+.ov-item.p2 { border-left-color: var(--t3); }
+.ov-item.p3 { border-left-color: var(--t2); }
+.ov-item.p4 { border-left-color: var(--line); }
+.ov-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 14px; }
+.ov-inds { margin: 0; padding-left: 18px; font-size: 13px; }
+.ov-inds li { margin: 3px 0; }
+.ov-stable { font-size: 13px; color: var(--t1); margin-top: 4px; }
+
+/* ---- 未来预测块（改动 4） ---- */
+.endpoint-line { font-size: 13.5px; margin: 0 0 6px; color: var(--ink-2); }
+.endpoint-line b { color: var(--ink); }
+.judge { font-size: 14px; margin: 10px 0 4px; }
+.horizon-mini.clickable .hmini.sel { cursor: pointer; border-radius: 10px; padding: 6px 8px; }
+.horizon-mini.clickable .hmini.sel:hover { background: var(--surface-2); }
+.horizon-mini.clickable .hmini.sel.on { background: var(--surface-2); outline: 1px solid var(--line); }
+
+/* ---- 后续健康跟踪（改动 8） ---- */
+.fup-grid { display: flex; flex-direction: column; gap: 8px; }
+.fup-row { display: flex; gap: 12px; font-size: 13.5px; align-items: baseline; }
+.fup-row .k { flex: 0 0 108px; color: var(--ink-3); }
+.fup-row .v { flex: 1; }
+.autocompare {
+  border-radius: var(--radius-sm); padding: 10px 12px; margin-bottom: 12px;
+  font-size: 13.5px; line-height: 1.55;
+}
+.autocompare.good { background: var(--t1-bg); color: var(--t1); }
+.autocompare.bad { background: var(--t4-bg); color: var(--t4); }
+.autocompare.flat { background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--line); }
+
+/* ---- 折叠区（科研字段 / AI 长文本） ---- */
+details.fold > summary {
+  cursor: pointer; user-select: none; font-size: 13px; color: var(--ink-3);
+  padding: 8px 0; list-style: none;
+}
+details.fold > summary::before { content: "▸ "; }
+details.fold[open] > summary::before { content: "▾ "; }
+details.fold > summary:hover { color: var(--ink); }
+
+/* ---- 检查时间轴条（本次 vs 上次 顶部） ---- */
+.exam-strip { display: flex; align-items: center; gap: 10px; margin: 2px 0 14px; }
+.es-lab { font: 500 11.5px var(--mono); color: var(--ink-3); white-space: nowrap; }
+.es-track {
+  position: relative; flex: 1; height: 14px; border-radius: 7px;
+  background: var(--paper-2); min-width: 120px;
+}
+.es-track i {
+  position: absolute; top: 50%; width: 8px; height: 8px; border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--surface); border: 2px solid var(--ink-3);
+}
+.es-track i.cur { border-color: var(--ink); background: var(--ink); }
+
+/* ---- AI Top3（改动 7） ---- */
+.top3-title { font: 700 14.5px/1.4 var(--sans); margin-bottom: 10px; }
+.top3-item {
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--surface-2); padding: 10px 12px; margin-bottom: 8px;
+}
+.top3-head { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.top3-n {
+  width: 20px; height: 20px; border-radius: 50%; background: var(--ink); color: var(--paper);
+  display: grid; place-items: center; font: 700 12px var(--sans); flex: 0 0 auto;
+}
+.top3-body { margin-top: 6px; font-size: 13px; color: var(--ink-2); }
+.top3-body p { margin: 3px 0; }
+.top3-body b { color: var(--ink); font-weight: 600; }
+
+/* ---- 报告原文弹窗 ---- */
+.rawtext {
+  max-height: 46vh; overflow: auto; white-space: pre-wrap; word-break: break-all;
+  background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: var(--radius-sm); padding: 12px; margin: 0;
+  font: 12.5px/1.6 var(--mono); color: var(--ink-2);
+}

@@ -22,6 +22,16 @@ const state = {
   meta: null, patients: [], pid: null, patient: null,
   records: [], refMap: {}, trend: null, charts: {},
   predicted: false, followedUp: false,
+  // 改版新增
+  reports: null,          // /reports 响应（历史检查资料清单）
+  timeline: null,         // /timeline 响应（健康时间轴确认数据）
+  riskTimeline: null,     // /risk-timeline 响应（按检查日期回溯的风险轨迹）
+  pending: [],            // 批量上传后待确认入库的报告 [{id,name,text,date,detected,src,nlines}]
+  concern: "all",        // 本次最关注的问题
+  lastPredict: null,      // 最近一次 /predict 响应
+  selHorizon: "3y",      // 未来预测区当前选中的时程
+  riskHorizon: "3y",     // 趋势页风险走势选中的时程
+  seriesRange: "all",    // 指标历史趋势时间范围
 };
 
 /* ---------------- 基础设施 ---------------- */
@@ -110,7 +120,8 @@ function go(page) {
 $$(".navbtn").forEach((b) => b.addEventListener("click", () => go(b.dataset.go)));
 $("#btnSwitch").addEventListener("click", () => go("patients"));
 $$(".step").forEach((b) => b.addEventListener("click", () => {
-  const map = { ingest: "#sec-ingest", predict: "#sec-predict", followup: "#sec-followup" };
+  const map = { ingest: "#sec-ingest", timeline: "#sec-timeline",
+                predict: "#sec-predict", followup: "#sec-followup" };
   $(map[b.dataset.step]).scrollIntoView({ behavior: "smooth", block: "start" });
 }));
 
@@ -181,15 +192,22 @@ async function selectPatient(pid, jump) {
   state.pid = pid;
   state.patient = state.patients.find((p) => p.patient_id === pid) || null;
   state.trend = null; state.predicted = false; state.followedUp = false;
+  state.reports = null; state.timeline = null; state.riskTimeline = null;
+  state.pending = []; state.lastPredict = null;
   store.set("drp.pid", pid);
 
   renderCtx();
+  renderPending();
   $("#predictOut").hidden = true;
   $("#sec-factors").hidden = true;
   $("#sec-referral").hidden = true;
   $("#parseOut").hidden = true;
+  $("#autoCompareBox").hidden = true;
+  renderFollowupPlain();
 
   await loadRecords();
+  await loadReports();
+  await loadTimeline();
   await loadTraces();
   updateSteps();
   if (jump) go("work");
@@ -334,13 +352,16 @@ function renderRecords() {
   })).join("");
 }
 
-/* ---------------- 报告解析与自动入库 ---------------- */
-async function parseAndIngestText(text) {
+/* ---------------- 报告解析与入库（真实检查日期随每份报告走） ---------------- */
+async function parseAndIngestText(text, measured_at) {
   if (!state.pid) {
     toast("先在「患者」里选一位", true);
     return null;
   }
-  const measured_at = $("#repDate").value || new Date().toISOString().slice(0, 10);
+  if (!measured_at) {
+    toast("请先填写这份报告的检查日期", true);
+    return null;
+  }
   const r = await api("/reports/parse", {
     method: "POST",
     body: { patient_id: state.pid, text: text, measured_at: measured_at },
@@ -350,61 +371,144 @@ async function parseAndIngestText(text) {
   state.patient = state.patients.find((p) => p.patient_id === state.pid);
   renderCtx();
   await loadRecords();
-  state.trend = null;
+  await loadReports();
+  await loadTimeline();
+  state.trend = null; state.riskTimeline = null;
   updateSteps();
   return r;
 }
 
-/* ---------------- 拍照/上传图片识别 ---------------- */
+/* ---------------- 批量上传 → OCR → 检查日期确认 → 入库 ---------------- */
 $("#btnOCR").addEventListener("click", () => { $("#repImage").click(); });
 $("#repImage").addEventListener("change", async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  if (!state.pid) { toast("先在「患者」里选一位", true); return; }
+  const files = [...e.target.files];
+  if (!files.length) return;
+  if (!state.pid) { toast("先在「患者」里选一位", true); $("#repImage").value = ""; return; }
 
   const btn = $("#btnOCR");
   btn.disabled = true;
-  $("#parseStat").innerHTML = `<span class="spinner"></span> 正在识别并自动入库…`;
-
-  try {
-    const b64 = await new Promise((ok, fail) => {
-      const reader = new FileReader();
-      reader.onload = () => ok(reader.result);
-      reader.onerror = fail;
-      reader.readAsDataURL(file);
-    });
-
-    const ocrRes = await api("/ocr", { method: "POST", body: { image: b64 } });
-    if (!ocrRes.text || !ocrRes.text.trim()) {
-      $("#parseStat").textContent = "";
-      toast("未识别到文字，请检查图片清晰度", true);
-      return;
+  let done = 0;
+  for (const file of files) {
+    done += 1;
+    $("#parseStat").innerHTML =
+      `<span class="spinner"></span> 正在识别第 ${done}/${files.length} 份：${esc(file.name)}…`;
+    try {
+      const b64 = await new Promise((ok, fail) => {
+        const reader = new FileReader();
+        reader.onload = () => ok(reader.result);
+        reader.onerror = fail;
+        reader.readAsDataURL(file);
+      });
+      const ocr = await api("/ocr", { method: "POST", body: { image: b64 } });
+      if (!ocr.text || !ocr.text.trim()) {
+        toast(`「${file.name}」未识别到文字，已跳过`, true);
+        continue;
+      }
+      state.pending.push({
+        id: "p" + Date.now() + "_" + Math.random().toString(36).slice(2, 7),
+        name: file.name,
+        text: ocr.text,
+        date: ocr.detected_date || "",
+        detected: !!ocr.detected_date,
+        src: ocr.detected_date_source || "",
+        nlines: ocr.count || 0,
+      });
+      renderPending();
+    } catch (err) {
+      toast(`「${file.name}」识别失败：${err.message}`, true);
     }
-
-    $("#repText").value = ocrRes.text;
-
-    // 自动直接执行解析入库
-    const parseRes = await parseAndIngestText(ocrRes.text);
-    $("#parseStat").textContent = "";
-    if (parseRes) {
-      toast(`已自动识别并入库 ${parseRes.stored} 项指标`);
-    }
-  } catch (err) {
-    $("#parseStat").textContent = "";
-    toast(err.message || "识别/入库失败", true);
-  } finally {
-    btn.disabled = false;
-    $("#repImage").value = "";
+  }
+  $("#parseStat").textContent = "";
+  btn.disabled = false;
+  $("#repImage").value = "";
+  if (state.pending.length) {
+    const nAuto = state.pending.filter((p) => p.detected).length;
+    toast(`已识别 ${state.pending.length} 份报告，其中 ${nAuto} 份自动识别到检查日期，请确认后入库`);
   }
 });
+
+function renderPending() {
+  const wrap = $("#pendingWrap"), box = $("#pendingList");
+  if (!state.pending.length) { wrap.hidden = true; box.innerHTML = ""; return; }
+  wrap.hidden = false;
+  $("#pendingCount").textContent = `${state.pending.length} 份待确认`;
+  box.innerHTML = state.pending.map((p) => `
+    <div class="pend" data-pend="${p.id}">
+      <div class="pend-head">
+        <span class="pend-name" title="${esc(p.name)}">${esc(p.name)}</span>
+        <span class="muted">识别 ${p.nlines} 行文本</span>
+      </div>
+      <div class="pend-date">
+        ${p.detected
+          ? `<span class="tag t1">已识别检查日期</span><span class="muted" style="font-size:11.5px">${esc(p.src)}</span>`
+          : `<span class="tag t2">未识别到日期，请填写</span>`}
+        <input type="date" class="pend-input" value="${esc(p.date)}">
+        <span style="flex:1"></span>
+        <button class="btn sm" data-ok="${p.id}">确认入库</button>
+        <button class="btn ghost sm" data-rm="${p.id}">移除</button>
+      </div>
+    </div>`).join("");
+  $$("#pendingList [data-ok]").forEach((b) =>
+    b.addEventListener("click", () => confirmPending(b.dataset.ok)));
+  $$("#pendingList [data-rm]").forEach((b) =>
+    b.addEventListener("click", () => {
+      state.pending = state.pending.filter((p) => p.id !== b.dataset.rm);
+      renderPending();
+    }));
+  $$("#pendingList .pend-input").forEach((inp) =>
+    inp.addEventListener("change", () => {
+      const it = state.pending.find((p) => p.id === inp.closest(".pend").dataset.pend);
+      if (it) { it.date = inp.value; it.detected = false; it.src = "手动填写"; }
+    }));
+}
+
+async function confirmPending(id, silent = false) {
+  const it = state.pending.find((p) => p.id === id);
+  if (!it) return false;
+  if (!it.date) { if (!silent) toast(`「${it.name}」还没有检查日期`, true); return false; }
+  try {
+    const r = await parseAndIngestText(it.text, it.date);
+    if (!r) return false;
+    state.pending = state.pending.filter((p) => p.id !== id);
+    renderPending();
+    if (!silent) toast(`「${it.name}」已入库 ${r.stored} 项（检查日期 ${it.date}）`);
+    if (!state.pending.length) await afterBatchIngest();
+    return true;
+  } catch (e) { toast(`「${it.name}」入库失败：${e.message}`, true); return false; }
+}
+
+$("#btnConfirmAll").addEventListener("click", async () => {
+  const missing = state.pending.filter((p) => !p.date);
+  if (missing.length)
+    return toast(`还有 ${missing.length} 份未填写检查日期`, true);
+  const btn = $("#btnConfirmAll");
+  btn.disabled = true;
+  let ok = 0;
+  for (const it of [...state.pending]) {
+    $("#parseStat").innerHTML =
+      `<span class="spinner"></span> 正在入库：${esc(it.name)}…`;
+    if (await confirmPending(it.id, true)) ok += 1;
+  }
+  $("#parseStat").textContent = "";
+  btn.disabled = false;
+  toast(`批量入库完成：成功 ${ok} 份`);
+});
+
+/** 批量导入完成后的收尾：滚到时间轴确认；若已有历史预测则自动比较。 */
+async function afterBatchIngest() {
+  $("#sec-timeline").scrollIntoView({ behavior: "smooth", block: "start" });
+  if (state.patient?.last_predicted_at) await autoCompareWithLast();
+}
 
 /* ---------------- 填充示例 ---------------- */
 $("#btnSample").addEventListener("click", async () => {
   $("#repText").value = state.meta.sample_report;
+  $("#detailsManualText").open = true;
+  if (!$("#repDate").value) $("#repDate").value = new Date().toISOString().slice(0, 10);
   if (state.pid) {
     $("#parseStat").innerHTML = `<span class="spinner"></span> 解析中…`;
     try {
-      const r = await parseAndIngestText(state.meta.sample_report);
+      const r = await parseAndIngestText(state.meta.sample_report, $("#repDate").value);
       $("#parseStat").textContent = "";
       if (r) toast(`示例已入库 ${r.stored} 条`);
     } catch (e) {
@@ -417,17 +521,146 @@ $("#btnSample").addEventListener("click", async () => {
 /* ---------------- 手动点击解析 ---------------- */
 $("#btnParse").addEventListener("click", async () => {
   const btn = $("#btnParse");
+  const d = $("#repDate").value;
+  if (!d) return toast("请先填写这份报告的检查日期", true);
   btn.disabled = true;
   $("#parseStat").innerHTML = `<span class="spinner"></span> 解析中…`;
   try {
-    const r = await parseAndIngestText($("#repText").value);
+    const r = await parseAndIngestText($("#repText").value, d);
     $("#parseStat").textContent = "";
-    if (r) toast(`入库 ${r.stored} 条`);
+    if (r) toast(`入库 ${r.stored} 条（检查日期 ${d}）`);
   } catch (e) {
     $("#parseStat").textContent = "";
     toast(e.message, true);
   } finally { btn.disabled = false; }
 });
+
+/* ---------------- 我的历史检查资料（逐份可见 · 可管理） ---------------- */
+async function loadReports() {
+  if (!state.pid) return;
+  state.reports = await api(`/patients/${encodeURIComponent(state.pid)}/reports`);
+  renderReports();
+}
+
+const ym = (d) => d ? String(d).slice(0, 7).replace("-", ".") : "—";
+
+function renderReports() {
+  const box = $("#reportTable"), sumEl = $("#reportsSummary");
+  const d = state.reports;
+  if (!d || !d.reports.length) {
+    sumEl.innerHTML = `还没有上传过报告`;
+    box.innerHTML = "";
+    return;
+  }
+  const s = d.summary;
+  sumEl.innerHTML =
+    `<b>已上传 ${s.n_reports} 份报告</b>｜${ym(s.first_date)}—${ym(s.last_date)}｜识别 ${s.n_stored_total} 条指标`;
+  box.innerHTML = `
+    <div class="rep-row rep-head">
+      <span>检查日期</span><span>报告</span><span class="num">识别结果</span><span>状态</span><span></span>
+    </div>` +
+    d.reports.map((r) => `
+    <div class="rep-row" data-rep="${r.id}">
+      <span class="rep-date"><input type="date" value="${esc(String(r.measured_at).slice(0, 10))}"
+            title="修改检查日期后自动保存"></span>
+      <span class="rep-name mono">#${r.id}</span>
+      <span class="num">${r.n_stored} 项</span>
+      <span>${r.n_stored ? `<span class="tag t1">✓ 已入库</span>` : `<span class="tag t2">无有效指标</span>`}</span>
+      <span class="rep-ops">
+        <button class="mini" data-view="${r.id}">查看原文</button>
+        <button class="mini" data-reparse="${r.id}">重新识别</button>
+        <button class="mini danger" data-del="${r.id}">删除</button>
+      </span>
+    </div>`).join("");
+
+  $$("#reportTable .rep-date input").forEach((inp) =>
+    inp.addEventListener("change", async () => {
+      const id = inp.closest(".rep-row").dataset.rep;
+      if (!inp.value) return;
+      try {
+        await api(`/reports/${id}`, { method: "PATCH", body: { measured_at: inp.value } });
+        toast(`报告 #${id} 检查日期已改为 ${inp.value}，趋势与时间轴同步更新`);
+        state.trend = null; state.riskTimeline = null;
+        await loadRecords(); await loadReports(); await loadTimeline();
+      } catch (e) { toast(e.message, true); await loadReports(); }
+    }));
+  $$("#reportTable [data-view]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      try {
+        const r = await api(`/reports/${b.dataset.view}`);
+        $("#dlgReportMeta").textContent =
+          `报告 #${r.id} · 检查日期 ${String(r.measured_at).slice(0, 10)} · 上传于 ${String(r.created_at).slice(0, 10)}`;
+        $("#dlgReportText").textContent = r.raw_text;
+        $("#dlgReport").showModal();
+      } catch (e) { toast(e.message, true); }
+    }));
+  $$("#reportTable [data-reparse]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      b.disabled = true;
+      try {
+        const r = await api(`/reports/${b.dataset.reparse}/reparse`, { method: "POST", body: {} });
+        toast(`报告 #${b.dataset.reparse} 已重新识别，入库 ${r.stored} 项`);
+        state.trend = null; state.riskTimeline = null;
+        await loadRecords(); await loadReports(); await loadTimeline();
+      } catch (e) { toast(e.message, true); } finally { b.disabled = false; }
+    }));
+  $$("#reportTable [data-del]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      if (!confirm(`删除报告 #${b.dataset.del} 及其全部指标记录？此操作不可恢复。`)) return;
+      try {
+        await api(`/reports/${b.dataset.del}`, { method: "DELETE" });
+        toast(`报告 #${b.dataset.del} 已删除`);
+        state.trend = null; state.riskTimeline = null;
+        await refreshPatients();
+        state.patient = state.patients.find((p) => p.patient_id === state.pid);
+        renderCtx();
+        await loadRecords(); await loadReports(); await loadTimeline();
+        updateSteps();
+      } catch (e) { toast(e.message, true); }
+    }));
+}
+$("#dlgReportClose").addEventListener("click", () => $("#dlgReport").close());
+
+/* ---------------- 数据确认 · 健康时间轴 ---------------- */
+async function loadTimeline() {
+  if (!state.pid) return;
+  state.timeline = await api(`/patients/${encodeURIComponent(state.pid)}/timeline`);
+  renderTimeline();
+  updateSteps();
+}
+
+function renderTimeline() {
+  const t = state.timeline, box = $("#timelineBox");
+  if (!t || !t.n_records) {
+    box.innerHTML = `<div class="empty"><b>还没有可确认的数据</b>先在上面导入至少一份历史报告</div>`;
+    return;
+  }
+  const groups = t.groups.map((g) => {
+    const ok = g.n_timepoints >= 2;
+    return `<div class="tlg ${ok ? "" : "warn"}">
+      <span class="tlg-ic">${ok ? "✓" : "⚠"}</span>
+      <span>${esc(g.group)}</span>
+      <span class="muted">${ok ? `${g.n_timepoints} 个时间点` : `仅 ${g.n_timepoints} 个时间点`}</span>
+    </div>`;
+  }).join("");
+  box.innerHTML = `
+    <div class="tl-done"><b>已建立个人健康时间轴</b></div>
+    <div class="stat-row">
+      <div class="stat"><div class="v">${esc(t.span_label)}</div><div class="k">数据跨度</div></div>
+      <div class="stat"><div class="v">${t.n_reports}</div><div class="k">检查报告</div></div>
+      <div class="stat"><div class="v">${t.n_records}</div><div class="k">有效记录</div></div>
+      <div class="stat"><div class="v">${t.n_comparable_indicators}</div><div class="k">可连续比较指标</div></div>
+    </div>
+    <div class="tlg-list">${groups}</div>
+    <div class="divider"></div>
+    ${t.longitudinal_ready
+      ? `<p class="ready-line">✓ 数据已具备纵向趋势分析条件（${esc(t.first_date)} — ${esc(t.last_date)}）</p>
+         <button class="btn block" id="btnGoPredict">开始风险预测</button>`
+      : `<p class="ready-line warn">⚠ 目前只有 ${t.n_dates} 个检查时间点；补充不同日期的报告后才能做纵向趋势分析（单次数据仍可预测，但没有趋势特征）。</p>
+         <button class="btn ghost block" id="btnGoPredict">仍要基于单次数据预测</button>`}`;
+  $("#btnGoPredict").addEventListener("click", () =>
+    $("#sec-predict").scrollIntoView({ behavior: "smooth", block: "start" }));
+}
 
 function renderParse(r) {
   $("#parseOut").hidden = false;
@@ -472,19 +705,29 @@ function tierPos(p, cuts) {
   return { idx: i, pct: ((i + Math.max(0, Math.min(1, inner))) / n) * 100 };
 }
 
+/* 本次最关注的问题（改动 2）：单选 chip，随预测请求提交 */
+$$("#concernChips .chip").forEach((b) => b.addEventListener("click", () => {
+  state.concern = b.dataset.concern;
+  $$("#concernChips .chip").forEach((x) => x.classList.toggle("on", x === b));
+}));
+
 $("#btnPredict").addEventListener("click", async () => {
   if (!state.pid) return toast("先在「患者」里选一位", true);
   const btn = $("#btnPredict");
   btn.disabled = true;
-  $("#predStat").innerHTML = `<span class="spinner"></span> 特征管线 + 多时程推理中…`;
+  $("#predStat").innerHTML = `<span class="spinner"></span> 读取全部历史数据 → 时序特征管线 → 多时程推理中…`;
   try {
-    const r = await api("/predict", { method: "POST", body: { patient_id: state.pid } });
+    const r = await api("/predict", {
+      method: "POST", body: { patient_id: state.pid, concern: state.concern },
+    });
     $("#predStat").textContent = "";
     renderPredict(r);
     state.predicted = true;
-    state.trend = null;
+    state.trend = null; state.riskTimeline = null;
     await loadTraces();
     await refreshPatients();
+    state.patient = state.patients.find((p) => p.patient_id === state.pid);
+    renderFollowupPlain();
     updateSteps();
   } catch (e) {
     $("#predStat").textContent = "";
@@ -492,16 +735,57 @@ $("#btnPredict").addEventListener("click", async () => {
   } finally { btn.disabled = false; }
 });
 
-function renderPredict(r) {
-  $("#predictOut").hidden = false;
-  const main = r.results.find((x) => x.horizon === "3y") || r.results[r.results.length - 1];
+const RANK_TONE = { 1: "t4", 2: "t3", 3: "t2" };
+
+function renderOverview(r) {
+  // ① 先回答用户主动关注的问题
+  const ca = r.concern_answer, caBox = $("#concernAnswerBox");
+  if (ca) {
+    caBox.hidden = false;
+    caBox.className = "concern-answer " + (ca.status === "abnormal" ? "warn" : "ok");
+    caBox.innerHTML = `<b>你关注的「${esc(r.concern_label)}」：</b>${esc(ca.text)}`;
+  } else caBox.hidden = true;
+
+  // ② 风险优先级排序（改动 3）：首要/第二/第三关注 + 为什么排这里
+  const ov = r.risk_overview || { items: [], stable_groups: [] };
+  const items = ov.items.map((it) => {
+    const inds = it.indicators.map((x) => {
+      const trend = x.trend
+        ? `<span class="tag ${x.worsened ? "t3" : "line"}" style="margin-left:6px">${esc(x.trend)}</span>`
+        : "";
+      return `<li>${esc(x.name_cn)} <b class="mono">${num(x.value)}${esc(x.unit)}</b>
+        ${gradeTag(x.grade)}${trend}</li>`;
+    }).join("");
+    return `<div class="ov-item p${Math.min(it.rank, 4)}">
+      <div class="ov-head">
+        <span class="tag ${RANK_TONE[it.rank] || "line"}">${esc(it.rank_label)}</span>
+        <b>${esc(it.group)}相关异常</b>
+        <span class="muted">→ ${esc(it.department)} · ${esc(it.priority_label)}</span>
+      </div>
+      <div class="muted" style="margin:2px 0 6px">为什么排在这里：${esc(it.why)}</div>
+      <ul class="ov-inds">${inds}</ul>
+    </div>`;
+  }).join("");
+  const stable = (ov.stable_groups && ov.stable_groups.length)
+    ? `<div class="ov-stable">目前相对稳定：${ov.stable_groups.map(esc).join("、")}</div>` : "";
+  $("#riskOverviewBox").innerHTML = items ||
+    `<div class="empty"><b>本次未发现需要重点关注的异常</b>保持定期体检即可</div>`;
+  $("#riskOverviewBox").innerHTML += stable;
+}
+
+function selectHorizon(h) {
+  const r = state.lastPredict;
+  if (!r) return;
+  const main = r.results.find((x) => x.horizon === h) || r.results[r.results.length - 1];
+  state.selHorizon = main.horizon;
   const tiers = (state.meta.tiers || {})[main.horizon];
   const cuts = tiers ? tiers.cutpoints : [0.05, 0.15, 0.4];
   const names = tiers ? tiers.names : ["低危", "中危", "高危", "极高危"];
   const pos = tierPos(main.probability, cuts);
   const color = tierColor(main.risk_tier);
 
-  $("#heroHorizon").textContent = (main.horizon || "").toUpperCase() + " 进展风险";
+  const hCn = H_LABEL[main.horizon] || main.horizon;
+  $("#heroHorizon").textContent = `未来 ${hCn}内 · ${state.lastPredict.prediction_context?.endpoint_label || "综合健康风险"}`;
   $("#heroProb").innerHTML = `${(main.probability * 100).toFixed(1)}<span>%</span>`;
   $("#heroProb").style.color = color;
   $("#heroTier").innerHTML =
@@ -517,25 +801,61 @@ function renderPredict(r) {
     <div class="cuts">${names.map((nm, i) =>
       `<span>${esc(nm)}${i < cuts.length ? `<br>&lt; ${(cuts[i] * 100).toFixed(0)}%` : ""}</span>`).join("")}</div>`;
 
-  // 其余时程
+  $("#modelJudge").innerHTML =
+    `模型判断：未来 <b>${esc(hCn)}</b>内属于「<b style="color:${color}">${esc(main.risk_tier)}</b>」风险区间`;
+
+  // 三个时间窗口做成可点行（改动 4）
   $("#horizonMini").innerHTML = r.results.map((x) => {
     const c = (state.meta.tiers || {})[x.horizon];
     const p2 = tierPos(x.probability, c ? c.cutpoints : cuts);
-    return `<div class="hmini">
-      <span class="hl">${(x.horizon || "").toUpperCase()}</span>
+    return `<div class="hmini sel ${x.horizon === main.horizon ? "on" : ""}" data-h="${esc(x.horizon)}"
+                 title="点击查看该时间窗口的风险因素与解释">
+      <span class="hl">未来${esc(H_LABEL[x.horizon] || x.horizon)}</span>
       <span class="bar"><i style="width:${p2.pct}%;background:${tierColor(x.risk_tier)}"></i></span>
       <span class="pv" style="color:${tierColor(x.risk_tier)}">${pct1(x.probability)}</span>
       <span class="tag t${TIER_IDX[x.risk_tier] || 1}">${esc(x.risk_tier)}</span>
     </div>`;
   }).join("");
+  $$("#horizonMini .hmini").forEach((el) =>
+    el.addEventListener("click", () => selectHorizon(el.dataset.h)));
+
+  $("#factorHorizonNote").textContent =
+    `当前展示：未来 ${hCn}窗口的指标贡献（点击上方时间窗口可切换）`;
+  renderFactors(main);
+  $("#narrative").textContent = main.narrative;
+}
+
+function renderPredict(r) {
+  state.lastPredict = r;
+  $("#predictOut").hidden = false;
+
+  // 演示模型标识（核查项 4：不能包装成临床验证的疾病发生概率）
+  const ctx = r.prediction_context || {};
+  const banner = $("#demoBanner");
+  if (ctx.development_only) {
+    banner.hidden = false;
+    banner.textContent = "⚠ " + (ctx.development_note ||
+      "当前为演示模型：概率为统计演示值，未经过真实临床队列验证。");
+  } else banner.hidden = true;
+
+  renderOverview(r);
+
+  $("#endpointLabel").innerHTML =
+    `预测目标：<b>${esc(ctx.endpoint_label || "综合健康风险进展")}</b>` +
+    (ctx.endpoint_detail ? `<span class="muted" style="display:block;margin-top:2px">${esc(ctx.endpoint_detail)}</span>` : "");
+
+  $("#predBasis").textContent = ctx.n_reports != null
+    ? `预测依据：${ym(ctx.first_date)}—${ym(ctx.last_date)} 期间 ${ctx.n_reports} 份检查报告 · ` +
+      `${ctx.n_dates} 个检查时间点 · 共 ${ctx.n_comparable_indicators} 项可连续比较指标（有效记录 ${ctx.n_records} 条）`
+    : "";
+
+  selectHorizon(state.selHorizon || "3y");
 
   $("#servedBy").textContent =
     `服务版本 ${r.model_version}（${r.arm === "canary" ? "灰度臂" : "全量臂"}）· ` +
     `每个时程一条独立 trace，已写入全链路日志`;
 
-  renderFactors(main);
   renderReferral(r.referral);
-  $("#narrative").textContent = main.narrative;
   $("#monotonicNote").textContent = r.monotonic_note || "";
 }
 
@@ -608,12 +928,91 @@ $("#btnFeedback").addEventListener("click", async () => {
   } catch (e) { toast(e.message, true); }
 });
 
-/* ---------------- 步骤状态 ---------------- */
+/* ---------------- 后续健康跟踪（普通用户人话版，改动 8） ---------------- */
+const RECHECK_BY_TIER = {
+  "极高危": "建议 1 个月内复查", "高危": "建议 1~3 个月内复查",
+  "中危": "建议 3~6 个月内复查", "低危": "建议 6~12 个月复查",
+};
+
+function renderFollowupPlain() {
+  const box = $("#followupPlain");
+  const lastAt = state.patient?.last_predicted_at;
+  const r = state.lastPredict;
+  if (!lastAt && !r) {
+    box.innerHTML = `<div class="empty"><b>先完成一次风险预测</b>之后这里会给出建议复查时间与项目</div>`;
+    return;
+  }
+  const main = r ? (r.results.find((x) => x.horizon === "3y") || r.results[0]) : null;
+  const tier = main ? main.risk_tier : null;
+  const checkups = r
+    ? [...new Set((r.referral?.items || []).flatMap((it) => it.checkups))].slice(0, 8)
+    : [];
+  box.innerHTML = `
+    <div class="fup-grid">
+      <div class="fup-row"><span class="k">上次评估</span>
+        <span class="v">${lastAt ? esc(String(lastAt).slice(0, 10)) : "本次会话"}${
+          tier ? ` · <span class="tag t${TIER_IDX[tier] || 1}">${esc(tier)}</span>` : ""}</span></div>
+      <div class="fup-row"><span class="k">建议复查时间</span>
+        <span class="v">${tier ? esc(RECHECK_BY_TIER[tier] || "建议 6~12 个月复查") : "完成一次预测后给出"}</span></div>
+      <div class="fup-row"><span class="k">需要复查的项目</span>
+        <span class="v">${checkups.length ? checkups.map(esc).join("、") : "以「就医建议」卡片为准"}</span></div>
+    </div>
+    <p class="muted" style="margin:10px 0 0">到时候把新报告传进来，系统会自动和这次比较，告诉你是
+      <b>改善 / 稳定 / 升高</b>。</p>`;
+}
+
+/** 上传新报告后自动比较（改动 8）：跑一次新预测，与上一次的 3 年风险比。 */
+async function autoCompareWithLast() {
+  if (!state.pid) return;
+  try {
+    // 取"上一次"基线：审计走势里 3y 的最后一个点（本次上传之前的最近预测）
+    const trendBefore = await api(`/patients/${encodeURIComponent(state.pid)}/trend`);
+    const prevPts = trendBefore.risk_trajectories?.["3y"]?.points || [];
+    if (!prevPts.length) return;
+    const prev = prevPts[prevPts.length - 1];
+
+    toast("检测到新报告，正在自动与上次评估比较…");
+    const r = await api("/predict", {
+      method: "POST", body: { patient_id: state.pid, concern: state.concern },
+    });
+    renderPredict(r);
+    state.predicted = true;
+    state.trend = null; state.riskTimeline = null;
+    await loadTraces(); await refreshPatients();
+    state.patient = state.patients.find((p) => p.patient_id === state.pid);
+    renderFollowupPlain();
+    updateSteps();
+
+    const curr = r.results.find((x) => x.horizon === "3y") || r.results[0];
+    const dpp = (curr.probability - prev.probability) * 100;
+    let verdict, cls;
+    if (dpp <= -2) { verdict = "改善"; cls = "good"; }
+    else if (dpp >= 2) { verdict = "升高"; cls = "bad"; }
+    else { verdict = "稳定"; cls = "flat"; }
+    const box = $("#autoCompareBox");
+    box.hidden = false;
+    box.className = "autocompare " + cls;
+    box.innerHTML =
+      `自动比较：3 年风险 ${pct1(prev.probability)}（${esc(String(prev.at).slice(0, 10))}）` +
+      ` → ${pct1(curr.probability)}（本次），<b>${verdict}</b>` +
+      `（变化 ${dpp > 0 ? "+" : ""}${dpp.toFixed(1)} 个百分点）`;
+    toast(`与上次相比：风险${verdict}`);
+  } catch (e) {
+    toast("自动比较失败：" + e.message, true);
+  }
+}
+
+/* ---------------- 步骤状态（4 步） ---------------- */
 function updateSteps() {
   const hasRec = (state.patient?.n_records || 0) > 0;
+  const tlReady = !!state.timeline?.longitudinal_ready;
   const hasPred = state.predicted || !!state.patient?.last_predicted_at;
-  const set = (k, v) => $(`.step[data-step="${k}"]`).dataset.state = v;
+  const set = (k, v) => {
+    const el = $(`.step[data-step="${k}"]`);
+    if (el) el.dataset.state = v;
+  };
   set("ingest", hasRec ? "done" : "now");
+  set("timeline", tlReady ? "done" : hasRec ? "now" : "idle");
   set("predict", hasPred ? "done" : hasRec ? "now" : "idle");
   set("followup", state.followedUp ? "done" : hasPred ? "now" : "idle");
 }
@@ -621,36 +1020,20 @@ function updateSteps() {
 /* ---------------- 趋势 ---------------- */
 async function loadTrend(force = false) {
   if (!state.pid) return;
-  if (force) state.trend = null;
+  if (force) { state.trend = null; state.riskTimeline = null; }
   const t = (!force && state.trend) ? state.trend : (await api(`/patients/${encodeURIComponent(state.pid)}/trend`));
   state.trend = t;
 
-  // 风险走势：线色中性表示"哪个时程"，点色表示"当时哪一层"——
-  // 保持"饱和色只表示风险等级"这条全站规则。
-  const inks = [token("--ink"), token("--ink-2"), token("--ink-3")];
-  // 顶层 color 决定图例图标色；不设它 echarts 会退回默认蓝绿黄调色板。
-  const series = Object.entries(t.risk_trajectories).map(([h, traj], i) => ({
-    name: H_LABEL[h] || h, type: "line", smooth: 0.25, symbolSize: 9,
-    lineStyle: { width: 2, color: inks[i % 3] },
-    itemStyle: { color: (p) => tierColor(traj.points[p.dataIndex].risk_tier) },
-    data: traj.points.map((p) => [p.at, +(p.probability * 100).toFixed(2)]),
-  }));
-  const has = series.some((s) => s.data.length);
-  $("#riskEmpty").hidden = has;
-  $("#riskChart").style.display = has ? "" : "none";
-  if (has) {
-    chart("riskChart").setOption({
-      ...baseOption(),
-      color: inks,
-      legend: { top: 0, right: 0, icon: "roundRect", itemWidth: 10, itemHeight: 3,
-                textStyle: { color: token("--ink-2"), fontSize: 11 } },
-      tooltip: { ...baseOption().tooltip, valueFormatter: (v) => v + "%" },
-      yAxis: { ...baseOption().yAxis, name: "风险概率 %", min: 0 },
-      series,
-    }, true);
-  }
+  await drawRiskTimeline();
 
-  // 本次 vs 上次：复用参考区间带，把"上次→本次"的位移画出来
+  // 本次 vs 上次：标题写明确日期（改动 5），并画出整段检查时间轴
+  const dates = [...new Set(state.records.map((r) => String(r.measured_at).slice(0, 10)))].sort();
+  const dot = (d) => d ? d.replaceAll("-", ".") : "—";
+  $("#compareDates").textContent = dates.length >= 2
+    ? `本次 ${dot(dates[dates.length - 1])} vs 上次 ${dot(dates[dates.length - 2])}`
+    : "超过临床变化阈值才判为真实变化";
+  renderExamStrip(dates);
+
   const cbox = $("#compareList");
   $("#compareEmpty").hidden = !!t.comparisons.length;
   cbox.innerHTML = t.comparisons.map((c) => {
@@ -660,19 +1043,169 @@ async function loadTrend(force = false) {
       : `<span class="tag line">RCV 内 · 视为平稳</span>`;
     const d = `<span class="mono" style="margin-left:6px">${c.delta > 0 ? "+" : ""}${
       num(c.delta)}${c.delta_pct != null ? `（${(c.delta_pct * 100).toFixed(0)}%）` : ""}</span>`;
+    const pair = `<span class="muted" style="margin-left:6px;font-size:11px">${
+      esc(String(c.prev_at).slice(0, 10))} → ${esc(String(c.curr_at).slice(0, 10))}</span>`;
     return bandRow({
       name: c.name_cn, code: c.code, unit: c.unit, value: c.curr_value, prev: c.prev_value,
-      low: ref.low, high: ref.high, grade: c.curr_grade, extra: " " + verdict + d,
+      low: ref.low, high: ref.high, grade: c.curr_grade, extra: " " + verdict + d + pair,
     });
   }).join("");
 
-  // 指标曲线：参考区间画成背景带，比在图例里写"正常范围"直观
+  // 指标历史趋势：全部真实检查时间点 + 时间范围筛选
   const sel = $("#seriesSel");
   sel.innerHTML = t.series.map((s, i) => `<option value="${i}">${esc(s.name_cn)}</option>`).join("");
   sel.onchange = () => drawSeries(t.series[+sel.value]);
   if (t.series.length) drawSeries(t.series[0]);
   $("#trendText").textContent = t.rendered_text;
+  renderAITop3(t);
   renderAIAdvisor(t);
+}
+
+/* 风险走势（按真实检查日期回溯）：历史实线 + 未来预测虚线（改动 5/6）。
+   审计走势（按预测发生时间）保留给管理台复盘，不再作为用户侧曲线 ——
+   它在同一天连传 8 份报告时只会画出一条竖线/平线，正是本次要修的问题。 */
+async function drawRiskTimeline() {
+  if (!state.riskTimeline) {
+    try {
+      state.riskTimeline = await api(`/patients/${encodeURIComponent(state.pid)}/risk-timeline`);
+    } catch (e) { toast(e.message, true); return; }
+  }
+  const rt = state.riskTimeline;
+  const pts = rt.points || [];
+  const has = pts.length > 0;
+  $("#riskEmpty").hidden = has;
+  $("#riskChart").style.display = has ? "" : "none";
+  $("#riskBasisNote").textContent = has
+    ? `实线：各检查日期当时可得数据的回溯风险（${rt.model_version || ""}）；` +
+      `虚线：自最近一次检查（${pts[pts.length - 1].at}）起，未来 1/3/5 年内的累计风险预测。预测≠确定结果。`
+    : "";
+  if (!has) return;
+
+  const h = state.riskHorizon;
+  const histData = pts
+    .filter((p) => p.horizons[h])
+    .map((p) => [p.at, +(p.horizons[h].probability * 100).toFixed(2), p.horizons[h].risk_tier]);
+
+  // 未来累计风险：从最近检查日出发，P(≤+0)=0 起笔，经 +1y/+3y/+5y 三点
+  const last = pts[pts.length - 1];
+  const lastMs = new Date(last.at).getTime();
+  const DAY = 86400000;
+  const futureData = [[last.at, 0, null]];
+  [["1y", 365], ["3y", 1095], ["5y", 1825]].forEach(([hz, days]) => {
+    if (last.horizons[hz]) {
+      futureData.push([
+        new Date(lastMs + days * DAY).toISOString().slice(0, 10),
+        +(last.horizons[hz].probability * 100).toFixed(2),
+        `未来${H_LABEL[hz] || hz}`,
+      ]);
+    }
+  });
+
+  const base = baseOption();
+  chart("riskChart").setOption({
+    ...base,
+    color: [token("--ink"), token("--ink-3")],
+    legend: { top: 0, right: 0, icon: "roundRect", itemWidth: 12, itemHeight: 3,
+              textStyle: { color: token("--ink-2"), fontSize: 11 } },
+    tooltip: {
+      ...base.tooltip,
+      formatter: (ps) => ps.map((p) => {
+        const tag = p.data[2] ? `（${p.data[2]}）` : "";
+        return `${p.marker}${p.seriesName} ${String(p.data[0]).slice(0, 10)}：<b>${p.data[1]}%</b>${tag}`;
+      }).join("<br>"),
+    },
+    xAxis: { ...base.xAxis, axisLabel: { ...base.xAxis.axisLabel,
+      formatter: (v) => { const d = new Date(v); return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}`; } } },
+    yAxis: { ...base.yAxis, name: "风险概率 %", min: 0, max: 100 },
+    series: [
+      {
+        name: `历史 · ${H_LABEL[h] || h}风险（回溯）`, type: "line",
+        smooth: 0.2, symbolSize: 9,
+        lineStyle: { width: 2, color: token("--ink") },
+        itemStyle: { color: (p) => tierColor(histData[p.dataIndex]?.[2]) },
+        data: histData,
+        markLine: {
+          silent: true, symbol: "none",
+          lineStyle: { color: token("--ink-3"), type: "dotted" },
+          label: { formatter: "最近检查", color: token("--ink-3"), fontSize: 10 },
+          data: [{ xAxis: last.at }],
+        },
+      },
+      {
+        name: "未来累计风险预测", type: "line",
+        smooth: 0.2, symbolSize: 8, symbol: "emptyCircle",
+        lineStyle: { width: 2, color: token("--ink-3"), type: "dashed" },
+        itemStyle: { color: token("--ink-3") },
+        data: futureData,
+      },
+    ],
+  }, true);
+}
+
+$$("#riskHorizonChips .chip").forEach((b) => b.addEventListener("click", () => {
+  state.riskHorizon = b.dataset.h;
+  $$("#riskHorizonChips .chip").forEach((x) => x.classList.toggle("on", x === b));
+  drawRiskTimeline();
+}));
+
+/** 检查时间轴条：从初始点到终止点，把每一次检查按真实日期标在轴上。 */
+function renderExamStrip(dates) {
+  const el = $("#examStrip");
+  if (!dates || dates.length < 2) { el.hidden = true; el.innerHTML = ""; return; }
+  el.hidden = false;
+  const t0 = new Date(dates[0]).getTime(), t1 = new Date(dates[dates.length - 1]).getTime();
+  const span = Math.max(t1 - t0, 1);
+  const dot = (d) => d.replaceAll("-", ".");
+  el.innerHTML = `
+    <span class="es-lab">${dot(dates[0])}</span>
+    <span class="es-track">${dates.map((d, i) => {
+      const x = ((new Date(d).getTime() - t0) / span) * 100;
+      const cur = i === dates.length - 1;
+      return `<i class="${cur ? "cur" : ""}" style="left:${x}%" title="${dot(d)}"></i>`;
+    }).join("")}</span>
+    <span class="es-lab">${dot(dates[dates.length - 1])}</span>
+    <span class="muted" style="margin-left:8px;white-space:nowrap">${dates.length} 次检查</span>`;
+}
+
+$$("#seriesRangeChips .chip").forEach((b) => b.addEventListener("click", () => {
+  state.seriesRange = b.dataset.range;
+  $$("#seriesRangeChips .chip").forEach((x) => x.classList.toggle("on", x === b));
+  const t = state.trend;
+  if (t && t.series.length) drawSeries(t.series[+$("#seriesSel").value || 0]);
+}));
+
+/** AI 分析置顶：最需要关注的 3 个问题（改动 7）。内容来自模型/规则结果，
+    按"为什么重要 → 历史变化 → 当前风险 → 建议关注"组织，AI 不创造概率。 */
+function renderAITop3(t) {
+  const box = $("#aiTop3");
+  const ivs = (t.interventions || []).filter((x) => x.level !== "平稳维持");
+  const order = { "重点关注": 0, "积极改善": 1 };
+  ivs.sort((a, b) => (order[a.level] ?? 9) - (order[b.level] ?? 9));
+  const top = ivs.slice(0, 3);
+  if (!top.length) { box.innerHTML = ""; return; }
+  const compByName = {};
+  (t.comparisons || []).forEach((c) => { compByName[c.name_cn] = c; });
+  box.innerHTML = `<div class="top3-title">最需要关注的 ${top.length} 个问题</div>` +
+    top.map((iv, i) => {
+      const hist = iv.target_indicators.map((ti) => {
+        const nm = ti.split(" (")[0];
+        const c = compByName[nm];
+        if (!c) return null;
+        return c.is_real_change
+          ? `${nm}较上次${c.direction}${c.worsened ? "且加重" : ""}`
+          : `${nm}较上次平稳`;
+      }).filter(Boolean).slice(0, 3);
+      return `<div class="top3-item">
+        <div class="top3-head"><span class="top3-n">${i + 1}</span><b>${esc(iv.system)}</b>
+          <span class="tag ${iv.level === "重点关注" ? "t3" : "t2"}">${esc(iv.level)}</span></div>
+        <div class="top3-body">
+          <p><b>为什么重要：</b>${iv.target_indicators.slice(0, 4).map(esc).join("、")}</p>
+          <p><b>历史变化：</b>${hist.length ? hist.map(esc).join("；") : "累计两次以上记录后可见变化方向"}</p>
+          <p><b>当前风险：</b>该系统当前${iv.level === "重点关注" ? "存在恶化中的异常，属于优先处理项" : "存在异常但未见加重，建议积极改善"}</p>
+          <p><b>建议关注：</b>${esc(iv.followup_cycle)}</p>
+        </div>
+      </div>`;
+    }).join("");
 }
 
 function renderAIAdvisor(t) {
@@ -692,6 +1225,7 @@ function renderAIAdvisor(t) {
     return;
   }
 
+  // 改动 7：结论排序在上（renderAITop3），长文本一律进展开区域
   let html = "";
 
   // 1. 若有 LLM 自由生成的叙述文本，优先展示
@@ -793,11 +1327,23 @@ function renderAIAdvisor(t) {
     `;
   }
 
-  box.innerHTML = html;
+  box.innerHTML = html
+    ? `<details class="fold ai-fold"><summary>展开完整专业分析（机制剖析 / 膳食与运动处方 / 随访日程）</summary>
+       <div style="margin-top:12px">${html}</div></details>`
+    : "";
 }
 
 function drawSeries(s) {
   if (!s) return;
+  // 时间范围筛选（全部/近1年/近3年/近5年）——从最近一次检查日期倒推
+  let points = s.points;
+  if (state.seriesRange !== "all" && points.length) {
+    const lastMs = new Date(points[points.length - 1].at).getTime();
+    const cutoff = lastMs - (+state.seriesRange) * 365.25 * 86400000;
+    const filtered = points.filter((p) => new Date(p.at).getTime() >= cutoff);
+    if (filtered.length >= 1) points = filtered;
+  }
+  s = { ...s, points };
   const ref = state.refMap[s.code] || {};
   const markArea = (ref.low != null || ref.high != null) ? {
     silent: true,
@@ -809,6 +1355,8 @@ function drawSeries(s) {
   const base = baseOption();
   chart("seriesChart").setOption({
     ...base,
+    xAxis: { ...base.xAxis, axisLabel: { ...base.xAxis.axisLabel,
+      formatter: (v) => { const d = new Date(v); return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}`; } } },
     yAxis: { ...base.yAxis, name: s.unit, scale: true },
     series: [{
       name: s.name_cn, type: "line", smooth: 0.25, symbolSize: 9,

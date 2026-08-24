@@ -39,4 +39,3 @@ where = ["src"]
 addopts = "-ra"
 testpaths = ["tests"]
 pythonpath = ["src", "."]
-
