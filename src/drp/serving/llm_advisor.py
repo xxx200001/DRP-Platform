@@ -534,3 +534,137 @@ def generate_llm_trend_analysis(
         expert_data["source"] = "AI_CLINICAL_KNOWLEDGE_ENGINE"
 
     return expert_data
+
+
+# ---------------------------------------------------------------------------
+# AI 个性化就医 & 生活建议（V3.6 新增）
+# ---------------------------------------------------------------------------
+def generate_ai_lifestyle_advice(
+    patient_info: dict[str, Any],
+    system_risks: list[dict],
+    referral_items: list[dict],
+    overview_items: list[dict],
+) -> dict[str, Any] | None:
+    """
+    调用在线 LLM 为该患者生成个性化就医建议与生活方式指导。
+    返回结构化字典：
+      {
+        "source": "AI_LLM" | "RULE_ENGINE",
+        "departments": [...],   # 就医科室 + 建议检查（AI 定制）
+        "diet": [...],          # 饮食建议（含具体数值）
+        "exercise": [...],      # 运动方案
+        "lifestyle": [...],     # 作息与其他
+        "red_flags": [...],     # 红旗信号
+        "followup_cycle": str,  # 建议复查周期
+      }
+    LLM 不可用时返回 None（上层使用规则引擎兜底）。
+    """
+    env = resolve_llm_env()
+    if env.get("provider") is None:
+        return None
+
+    sex = str(patient_info.get("sex") or "未知")
+    age_raw = patient_info.get("age")
+    try:
+        age_num = float(age_raw)
+        age_txt = f"{age_num:.0f}"
+    except (TypeError, ValueError):
+        age_num = None
+        age_txt = "未知"
+
+    # 收集所有异常指标（带真实值）
+    abnormal_lines = []
+    for ov in overview_items:
+        for ind in ov.get("indicators", []):
+            tag = ""
+            g = ind.get("grade", 0)
+            if g and g > 0:
+                tag = "偏高"
+            elif g and g < 0:
+                tag = "偏低"
+            trend = f"，{ind['trend']}" if ind.get("trend") else ""
+            abnormal_lines.append(
+                f"- {ind['name_cn']} {ind['value']}{ind.get('unit','')}"
+                f"（{tag}，参考区间 {ind.get('ref_low','?')}-{ind.get('ref_high','?')}{ind.get('unit','')}）"
+                f"{trend}"
+            )
+
+    # 收集规则引擎的就医建议作为参考
+    rule_depts = []
+    for it in referral_items:
+        rule_depts.append(
+            f"- {it.get('department','')}: {it.get('group','')}"
+            f" ({it.get('priority_label','常规随访')})"
+            f"，建议检查：{'、'.join(it.get('checkups',[]))}"
+        )
+
+    system_prompt = (
+        "你是一位经验丰富的全科医生和健康管理专家。"
+        "根据患者的真实化验异常数值，给出个性化的就医建议与生活方式指导。"
+        "严格合规：不使用『确诊/治疗/开药/剂量/处方/用药方案』等词，"
+        "就医相关一律用『建议就诊/建议复查』。不编造新数据。"
+        "回答必须针对该患者的具体异常数值，不能给通用建议。"
+    )
+
+    prompt = (
+        f"患者：{sex}，{age_txt}岁。\n"
+        f"本次检查发现以下异常指标：\n"
+        + ("\n".join(abnormal_lines) or "（无异常）") + "\n\n"
+        f"参考的规则引擎建议：\n"
+        + ("\n".join(rule_depts) or "（无）") + "\n\n"
+        "请严格按以下JSON格式输出（不要加其他文字，只输出JSON）：\n"
+        '{\n'
+        '  "departments": [\n'
+        '    {"name": "科室名", "priority": "常规随访/尽快就诊", "group": "系统名",\n'
+        '     "reason": "为什么要去这个科室（引用具体数值）",\n'
+        '     "checkups": ["建议检查项1", "建议检查项2"]}\n'
+        '  ],\n'
+        '  "diet": [\n'
+        '    {"title": "饮食建议大标题（针对具体系统）",\n'
+        '     "items": ["具体建议1（引用真实数值）", "具体建议2"]}\n'
+        '  ],\n'
+        '  "exercise": ["运动建议1（按年龄定制心率区间等）", "运动建议2"],\n'
+        '  "lifestyle": ["作息建议1", "睡眠/情绪管理建议2"],\n'
+        '  "red_flags": ["出现X症状立即就医"],\n'
+        '  "followup_cycle": "建议N个月后复查"\n'
+        '}\n'
+    )
+
+    try:
+        raw = call_llm(prompt, system_prompt)
+        if not raw:
+            return None
+
+        # 尝试从 LLM 输出中提取 JSON
+        import re as _re
+        txt = raw.strip()
+        txt = _re.sub(r"^```[a-zA-Z0-9_-]*\s*", "", txt)
+        txt = _re.sub(r"\s*```$", "", txt)
+        txt = txt.strip()
+
+        parsed = None
+        try:
+            parsed = json.loads(txt)
+        except Exception:
+            m = _re.search(r"(\{[\s\S]*\})", txt)
+            if m:
+                try:
+                    parsed = json.loads(m.group(1))
+                except Exception:
+                    pass
+
+        if parsed and isinstance(parsed, dict):
+            # 合规检查
+            if is_compliant(json.dumps(parsed, ensure_ascii=False)):
+                parsed["source"] = "AI_LLM"
+                logger.info("[LLM] AI 个性化生活建议生成成功")
+                return parsed
+            else:
+                logger.warning("[LLM] AI 生活建议未通过合规闸")
+                return None
+        else:
+            logger.warning("[LLM] AI 生活建议输出格式异常，降级为规则引擎")
+            return None
+    except Exception as e:
+        logger.warning("[LLM] AI 生活建议生成异常: %s", e)
+        return None

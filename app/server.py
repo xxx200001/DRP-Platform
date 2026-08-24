@@ -1118,7 +1118,7 @@ def build_server(app_data: str | Path):
         }
 
         # V3.2/V3.3：根据总览首要关注系统与用户关注点动态设定预测标签
-        # 彻底告别写死心血管，精确匹配实际异常系统或关注点
+        # V3.6：多系统标签——每个异常系统都独立展示预测目标
         _ENDPOINT_LABELS = {
             "肝功能": "肝功能相关疾病风险进展",
             "血脂": "血脂异常及心脑血管疾病风险进展",
@@ -1140,26 +1140,37 @@ def build_server(app_data: str | Path):
             "renal": "肾功能相关疾病风险进展",
         }
 
+        # 为每个异常系统生成独立的预测目标标签
+        all_endpoints = []
+        for ov in overview_items:
+            grp = ov["group"]
+            label = _ENDPOINT_LABELS.get(grp, f"{grp}相关疾病风险进展")
+            detail = (
+                f"基于本次检查，「{grp}」共 {len(ov['indicators'])} 项偏离参考区间。"
+                f"模型已按{grp}风险发展方向进行重点评估与解读。"
+            )
+            all_endpoints.append({
+                "group": grp,
+                "label": label,
+                "detail": detail,
+                "n_abnormal": len(ov["indicators"]),
+                "department": ov["department"],
+            })
+
+        # 兼容性：保留首要系统作为主标签
         target_label = None
         target_detail = None
 
-        if overview_items:
-            # 1. 优先以实际异常最严重的系统为预测目标
-            top_group = overview_items[0]["group"]
-            target_label = _ENDPOINT_LABELS.get(top_group, f"{top_group}相关疾病风险进展")
-            target_detail = (
-                f"基于本次检查，首要异常系统为「{top_group}」（共 {len(overview_items[0]['indicators'])} 项偏离参考区间）。"
-                f"模型已按{top_group}风险发展方向进行重点评估与解读。"
-            )
+        if all_endpoints:
+            target_label = all_endpoints[0]["label"]
+            target_detail = all_endpoints[0]["detail"]
         elif concern in _CONCERN_TO_ENDPOINT:
-            # 2. 无明显异常但用户有明确关注点
             c_name = _CONCERN_LABEL.get(concern, concern)
             target_label = _CONCERN_TO_ENDPOINT[concern]
             target_detail = (
                 f"本次体检「{c_name}」相关指标均在参考区间内，模型评估该系统风险处于平稳低位。"
             )
         else:
-            # 3. 全身指标均平稳
             target_label = "全身多系统健康平稳进展"
             target_detail = (
                 "本次体检全部入库指标均在参考区间内，多系统慢性疾病发生概率处于低危平稳状态。"
@@ -1167,6 +1178,7 @@ def build_server(app_data: str | Path):
 
         prediction_context["endpoint_label"] = target_label
         prediction_context["endpoint_detail"] = target_detail
+        prediction_context["all_endpoints"] = all_endpoints
 
         # -------- V3.2：分系统风险评估（基于真实指标异常） --------
         # 从 overview_items 里提取每个系统的异常程度，生成分系统风险等级
@@ -1287,6 +1299,37 @@ def build_server(app_data: str | Path):
             parts.append("建议按下方就医建议完成复查，并从饮食与运动入手调整生活方式。")
             ai_risk_narrative = "".join(parts)
 
+        # -------- V3.6: AI individualized lifestyle advice --------
+        ai_lifestyle = None
+        try:
+            from drp.serving.llm_advisor import generate_ai_lifestyle_advice
+            sex_cn = "女" if str(patient.get("sex", "")).upper() == "F" else "男"
+            p_info = {"sex": sex_cn, "age": round(_age_of(patient))}
+            # enrich overview indicators with ref_low / ref_high from snapshot
+            try:
+                _snap = build_trend_report(
+                    st.trend, recs, demographics=_demo_frame(patient),
+                    recent_n=1, audit=st.audit,
+                    pseudo_id=st.audit.pseudonymize(body.patient_id),
+                    horizons=tuple(st.horizons),
+                ).to_dict().get("latest_snapshot", [])
+                _sm = {e["code"]: e for e in _snap if e.get("code")}
+                for ov in overview_items:
+                    for ind in ov.get("indicators", []):
+                        se = _sm.get(ind.get("code", ""))
+                        if se:
+                            ind.setdefault("ref_low", se.get("ref_low"))
+                            ind.setdefault("ref_high", se.get("ref_high"))
+            except Exception:
+                pass
+            ai_lifestyle = generate_ai_lifestyle_advice(
+                p_info, system_risks,
+                advice.to_dict().get("items", []),
+                overview_items,
+            )
+        except Exception as e:
+            logger.warning("[Predict] AI lifestyle advice error: %s", e)
+
         return {
             "patient_id": body.patient_id,
             "model_version": decision.version,
@@ -1304,6 +1347,7 @@ def build_server(app_data: str | Path):
             "referral": advice.to_dict(),
             "system_risks": system_risks,
             "ai_risk_narrative": ai_risk_narrative,
+            "ai_lifestyle": ai_lifestyle,
         }
 
     # ---------------- 趋势报告与 AI 大模型深度分析 ----------------

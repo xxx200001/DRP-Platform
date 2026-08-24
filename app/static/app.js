@@ -1055,12 +1055,25 @@ function renderPredict(r) {
 
   renderOverview(r);
 
-  // V3.2：分系统风险评估 + AI 综合解读
+  // V3.2: system risk assessment + AI summary
   renderSystemRisks(r);
 
-  $("#endpointLabel").innerHTML =
-    `预测目标：<b>${esc(ctx.endpoint_label || "综合健康风险进展")}</b>` +
-    (ctx.endpoint_detail ? `<span class="muted" style="display:block;margin-top:2px">${esc(ctx.endpoint_detail)}</span>` : "");
+  // V3.6: multi-system endpoint labels
+  const eps = ctx.all_endpoints || [];
+  if (eps.length > 1) {
+    $("#endpointLabel").innerHTML =
+      `<div class="multi-ep-title">预测目标：<b>${eps.length} 个异常系统</b></div>` +
+      eps.map((ep, i) => `<div class="multi-ep-card ep-rank-${i + 1}">
+        <span class="multi-ep-badge">${i === 0 ? '首要' : '第' + (i + 1)}</span>
+        <b>${esc(ep.label)}</b>
+        <span class="muted">→ ${esc(ep.department)}</span>
+        <div class="muted" style="font-size:12px;margin-top:2px">${esc(ep.detail)}</div>
+      </div>`).join("");
+  } else {
+    $("#endpointLabel").innerHTML =
+      `预测目标：<b>${esc(ctx.endpoint_label || "综合健康风险进展")}</b>` +
+      (ctx.endpoint_detail ? `<span class="muted" style="display:block;margin-top:2px">${esc(ctx.endpoint_detail)}</span>` : "");
+  }
 
   $("#predBasis").textContent = ctx.n_reports != null
     ? `预测依据：${ym(ctx.first_date)}—${ym(ctx.last_date)} 期间 ${ctx.n_reports} 份检查报告 · ` +
@@ -1074,8 +1087,8 @@ function renderPredict(r) {
     `服务版本 ${r.model_version}（${r.arm === "canary" ? "灰度臂" : "全量臂"}）· ` +
     `每个时程一条独立 trace，已写入全链路日志`;
 
-  renderReferral(r.referral);
-  renderNextActions(r);   // ⑥ 下一步：把"还有趋势可看"这条路明确铺出来
+  renderReferral(r.referral, r.ai_lifestyle);
+  renderNextActions(r);   // next step actions
   $("#monotonicNote").textContent = r.monotonic_note || "";
 }
 
@@ -1161,9 +1174,68 @@ function renderFactors(main) {
   }).join("");
 }
 
-function renderReferral(ref) {
+function renderReferral(ref, aiLifestyle) {
   const sec = $("#sec-referral"), box = $("#referralBox");
   sec.hidden = false;
+
+  // AI lifestyle advice available: render rich AI-generated content
+  if (aiLifestyle && aiLifestyle.source === "AI_LLM") {
+    let html = `<div class="ai-advice-header">
+      <span class="ai-advice-badge">🤖 AI 定制建议</span>
+      <span class="muted">基于本次异常指标由 AI 大模型个性化生成</span>
+    </div>`;
+
+    // AI departments
+    if (aiLifestyle.departments && aiLifestyle.departments.length) {
+      html += aiLifestyle.departments.map((d) => `
+        <div class="advice p${d.priority === '尽快就诊' ? 2 : 1}">
+          <div><span class="dept">${esc(d.name)}</span>
+            <span class="tag">${esc(d.priority || '常规随访')}</span>
+            <span class="tag line">${esc(d.group || '')}</span></div>
+          <div class="ai-reason">${esc(d.reason || '')}</div>
+          ${d.checkups && d.checkups.length ? `<div class="checkups">建议检查：${d.checkups.map(esc).join("、")}</div>` : ""}
+        </div>`).join("");
+    }
+
+    // AI diet
+    if (aiLifestyle.diet && aiLifestyle.diet.length) {
+      html += `<div class="ai-section-title">🥗 饮食建议</div>`;
+      for (const d of aiLifestyle.diet) {
+        html += `<div class="ai-diet-card">
+          <div class="ai-diet-title">${esc(d.title || '')}</div>
+          <ul>${(d.items || []).map(x => `<li>${esc(x)}</li>`).join("")}</ul>
+        </div>`;
+      }
+    }
+
+    // AI exercise
+    if (aiLifestyle.exercise && aiLifestyle.exercise.length) {
+      html += `<div class="ai-section-title">🏃 运动方案</div>
+        <ul>${aiLifestyle.exercise.map(x => `<li>${esc(x)}</li>`).join("")}</ul>`;
+    }
+
+    // AI lifestyle
+    if (aiLifestyle.lifestyle && aiLifestyle.lifestyle.length) {
+      html += `<div class="ai-section-title">🌙 作息与生活管理</div>
+        <ul>${aiLifestyle.lifestyle.map(x => `<li>${esc(x)}</li>`).join("")}</ul>`;
+    }
+
+    // AI red flags
+    if (aiLifestyle.red_flags && aiLifestyle.red_flags.length) {
+      html += `<div class="ai-section-title" style="color:var(--c-danger)">🚨 红旗信号</div>
+        <ul class="red-flags">${aiLifestyle.red_flags.map(x => `<li>${esc(x)}</li>`).join("")}</ul>`;
+    }
+
+    // followup cycle
+    if (aiLifestyle.followup_cycle) {
+      html += `<div class="ai-followup">📅 ${esc(aiLifestyle.followup_cycle)}</div>`;
+    }
+
+    box.innerHTML = html;
+    return;
+  }
+
+  // Fallback: rule engine referral (original logic)
   if (!ref.items.length && !ref.general_note) {
     box.innerHTML = `<div class="empty"><b>各项指标都在参考区间内</b>保持定期体检即可</div>`;
     return;
