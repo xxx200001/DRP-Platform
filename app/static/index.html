@@ -6,7 +6,7 @@
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#0f1a17">
 <title>病情预测平台</title>
-<link rel="stylesheet" href="/app.css?v=3.0">
+<link rel="stylesheet" href="/app.css?v=3.1">
 <script src="/vendor/echarts.min.js"></script>
 </head>
 <body>
@@ -225,6 +225,7 @@
             <div class="prob" id="heroProb">—</div>
             <div class="tierline" id="heroTier"></div>
           </div>
+          <p class="hero-plain" id="heroPlain"></p>
           <div class="tierscale" id="tierScale"></div>
           <div class="horizon-mini clickable" id="horizonMini"></div>
           <p class="judge" id="modelJudge"></p>
@@ -251,10 +252,12 @@
 
       <div class="card" id="sec-referral" hidden>
         <header>
-          <h2>就医建议</h2>
-          <span class="note">根据异常指标推荐科室与检查</span>
+          <h2>④ 就医建议与生活方式</h2>
+          <span class="note">科室/检查来自规则引擎；饮食运动摘要来自 AI 深度分析</span>
         </header>
         <div id="referralBox"></div>
+        <div class="divider"></div>
+        <div id="lifestyleBox"></div>
       </div>
 
       <!-- STEP 4：后续健康跟踪（普通用户人话版） -->
@@ -302,6 +305,9 @@
       <p class="eyebrow">Trajectory</p>
       <h1 class="title">趋势追踪</h1>
       <p class="lede">单次指标不准，趋势才准。本页所有曲线横轴都是<b>真实检查日期</b>；「模型当时的判断」（按预测时间的审计走势）在管理台复盘。</p>
+
+      <!-- V3.1 流程：入库完成 → 先到本页看趋势 → 倒计时自动进入风险评估 -->
+      <div class="trend-banner" id="trendAutoBanner" hidden></div>
 
       <div class="card">
         <header>
@@ -468,6 +474,6 @@
 </dialog>
 
 <div id="toast" role="status" aria-live="polite"></div>
-<script src="/app.js?v=3.0"></script>
+<script src="/app.js?v=3.1"></script>
 </body>
 </html>

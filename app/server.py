@@ -200,6 +200,23 @@ _CONCERN_LABEL: dict[str, str] = {
     "renal": "肾脏", "other": "其他", "all": "全面分析",
 }
 
+#: V3.1 改动：用户反馈"没有说以后可能会成为什么病"。
+#: 按 ReferralEngine 的组名给出【长期未干预时的典型发展方向】。措辞纪律：
+#:   · 这是流行病学意义上的风险方向提示，不是对个体的诊断/断言 ——
+#:     前端固定追加"（风险提示，非诊断）"，后端文案里不写"会得/将患"。
+#:   · 由服务端统一下发，前端不许自己编病名（与 model_card 同一条纪律）。
+_GROUP_DIRECTION: dict[str, str] = {
+    "肝功能": "脂肪肝加重、肝纤维化，长期可进展为慢性肝病",
+    "血脂": "动脉粥样硬化，升高冠心病、脑卒中等心脑血管疾病风险",
+    "血糖代谢": "胰岛素抵抗加重，可能发展为 2 型糖尿病及其并发症",
+    "肾功能": "慢性肾脏病（CKD）进展，肾功能逐步下降",
+    "血压": "高血压病，累及心、脑、肾等靶器官",
+    "电解质": "水电解质紊乱相关的心律失常与肾脏问题",
+    "血常规": "贫血或血液系统异常持续（需结合临床进一步明确）",
+    "炎症指标": "慢性炎症负担，与心血管代谢疾病风险相关",
+    "体重管理": "肥胖相关代谢综合征（血糖、血脂、血压联动恶化）",
+}
+
 
 class FeedbackIn(BaseModel):
     trace_id: str
@@ -999,6 +1016,10 @@ def build_server(app_data: str | Path):
                 "indicators": inds,
                 "why": "、".join(why_bits),
                 "checkups": list(it.checkups),
+                # V3.1：长期未干预时的可能发展方向（风险提示，非诊断）
+                "direction": _GROUP_DIRECTION.get(
+                    it.group, "相关系统慢性疾病风险随时间累积"
+                ),
             })
         # "目前相对稳定"：有数据、且未触发任何异常建议的系统。
         # 组名口径对齐：Referral 的"血糖代谢"/"体重管理"映射到展示组名。
@@ -1215,10 +1236,9 @@ def build_server(app_data: str | Path):
             raise HTTPException(400, "缺少 image 字段（base64 编码图片）")
 
         loop = asyncio.get_running_loop()
-        extracted_text = await loop.run_in_executor(
-            None, _ocr_extract_image, image_b64
-        )
+        ocr = await loop.run_in_executor(None, _ocr_extract_image, image_b64)
 
+        extracted_text = ocr["text"]
         lines = [l.strip() for l in extracted_text.splitlines() if l.strip()]
         detected = _detect_report_date(extracted_text)
         return {
@@ -1228,6 +1248,11 @@ def build_server(app_data: str | Path):
             # 识别不出（None）时前端再让用户填写。
             "detected_date": detected[0],
             "detected_date_source": detected[1],
+            # V3.1：方向/版式/脱敏透明化，前端在待确认卡片上如实展示。
+            "engine": ocr["engine"],
+            "rotation": ocr["rotation"],          # 已自动旋转的角度（0=原图方向）
+            "layout": ocr["layout"],              # two_panel = 左右双栏已逐行拆开
+            "n_redacted": ocr["n_redacted"],
         }
 
     # ---------------- 前端静态托管（必须最后挂载，避免吞掉 /api） ----------------
@@ -1305,87 +1330,87 @@ def _get_rapid_ocr():
     return _rapid_ocr_engine
 
 
-def _ocr_extract_image(image_b64: str) -> str:
+def _rapid_items(engine, img) -> list[dict]:
+    """跑一次 RapidOCR，把结果转成 ocr_layout 的 item 字典（含置信度）。"""
+    results, _ = engine(img)
+    items: list[dict] = []
+    for box, text, score in results or []:
+        txt = (text or "").strip()
+        if not txt:
+            continue
+        pts = np.array(box)
+        items.append({
+            "text": txt,
+            "x0": float(np.min(pts[:, 0])), "y0": float(np.min(pts[:, 1])),
+            "x1": float(np.max(pts[:, 0])), "y1": float(np.max(pts[:, 1])),
+            "score": float(score) if score is not None else 0.5,
+        })
+    return items
+
+
+def _ocr_extract_image(image_b64: str) -> dict:
     """
-    通用图片 OCR 识别：
-    1. 优先使用本地 RapidOCR（极速、离线、零网络依赖、高精度中文/英文识别）
-    2. 若本地引擎未返回结果，尝试 Claude Vision API 兜底
+    通用图片 OCR 识别，返回结构化结果：
+      {"text", "engine", "rotation"(顺时针角度), "layout", "n_redacted"}
+
+    V3.1 三处升级（对应用户实测反馈"识别不准确不完整"）：
+      · 方向自适应：横版报告竖着拍是常态。对 0/90/180/270 四个方向各跑一遍，
+        按 Σ(置信度×文本权重) 取最优 —— 转错方向时中文识别近乎全灭，
+        评分差距是数量级的，误选概率极低。四跑的代价（秒级）换准确率，
+        对单机 Demo 是正确取舍；生产可先跑 0°、低分再补跑其余方向。
+      · 双栏重排：左右分栏逐行拆开输出，一行一指标，右栏不再丢失。
+      · 入库前脱敏：姓名/手机号/证件号等替换为 [已脱敏]（原图本就不落库）。
     """
     import base64
     import cv2
 
-    clean_b64 = image_b64
-    if "," in image_b64:
-        clean_b64 = image_b64.split(",", 1)[1]
+    from .ocr_layout import (
+        redact_pii_text, reconstruct_lines, text_weight,
+    )
 
-    # --- 1. 本地 RapidOCR 识别 ---
+    clean_b64 = image_b64.split(",", 1)[1] if "," in image_b64 else image_b64
+
+    # --- 1. 本地 RapidOCR：四方向试跑取最优 ---
     try:
         engine = _get_rapid_ocr()
         if engine is not None:
             raw = base64.b64decode(clean_b64)
             arr = np.frombuffer(raw, dtype=np.uint8)
-            img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
-            if img is not None:
-                results, _ = engine(img)
-                if results:
-                    items = []
-                    for box, text, score in results:
-                        txt = text.strip()
-                        if not txt:
-                            continue
-                        pts = np.array(box)
-                        x_min = float(np.min(pts[:, 0]))
-                        y_min = float(np.min(pts[:, 1]))
-                        x_max = float(np.max(pts[:, 0]))
-                        y_max = float(np.max(pts[:, 1]))
-                        y_center = (y_min + y_max) / 2.0
-                        height = max(y_max - y_min, 1.0)
-                        items.append({
-                            "text": txt,
-                            "x_min": x_min,
-                            "y_min": y_min,
-                            "x_max": x_max,
-                            "y_max": y_max,
-                            "y_center": y_center,
-                            "h": height,
-                        })
-
-                    if items:
-                        # 按照 y_center 排序，基于行中心点锚定聚类，彻底杜绝行雪球粘连
-                        items.sort(key=lambda it: it["y_center"])
-                        lines = []
-                        for it in items:
-                            matched = None
-                            for l in lines:
-                                if abs(it["y_center"] - l["anchor_y"]) <= max(min(it["h"], l["h"]) * 0.45, 5.0):
-                                    matched = l
-                                    break
-                            if matched:
-                                matched["items"].append(it)
-                                matched["anchor_y"] = sum(x["y_center"] for x in matched["items"]) / len(matched["items"])
-                                matched["h"] = sum(x["h"] for x in matched["items"]) / len(matched["items"])
-                            else:
-                                lines.append({"anchor_y": it["y_center"], "h": it["h"], "items": [it]})
-
-                        # 按行纵向从上到下排序，行内横向从左到右排序
-                        lines.sort(key=lambda l: l["anchor_y"])
-                        text_lines = []
-                        for l in lines:
-                            l["items"].sort(key=lambda x: x["x_min"])
-                            line_text = "  ".join(x["text"] for x in l["items"]).strip()
-                            if line_text:
-                                text_lines.append(line_text)
-
-                        final_text = "\n".join(text_lines)
-                        logger.info("[OCR] RapidOCR 成功精确聚类识别 %d 行文本", len(text_lines))
-                        return final_text
+            img0 = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+            if img0 is not None:
+                best = None  # (score, rotation_deg, items, page_w)
+                for k, deg in ((0, 0), (1, 270), (2, 180), (3, 90)):
+                    img = img0 if k == 0 else np.ascontiguousarray(np.rot90(img0, k))
+                    items = _rapid_items(engine, img)
+                    sc = sum(it["score"] * text_weight(it["text"]) for it in items)
+                    logger.info("[OCR] 方向 %d°: %d 框, 得分 %.0f", deg, len(items), sc)
+                    if best is None or sc > best[0]:
+                        best = (sc, deg, items, float(img.shape[1]))
+                if best and best[2]:
+                    _, deg, items, page_w = best
+                    lines, layout = reconstruct_lines(items, page_w)
+                    text, n_red = redact_pii_text("\n".join(lines))
+                    logger.info(
+                        "[OCR] RapidOCR 取方向 %d°，重排 %d 行（%s），脱敏 %d 处",
+                        deg, len(lines), layout, n_red,
+                    )
+                    return {
+                        "text": text, "engine": "rapidocr",
+                        "rotation": deg, "layout": layout, "n_redacted": n_red,
+                    }
     except Exception as e:
         logger.warning("[OCR] RapidOCR 执行异常 (%s)，尝试 Vision 兜底...", e)
 
-    # --- 2. 尝试 Vision API 兜底 ---
-    vision_items = _ai_vision_ocr_extract(image_b64)
-    if vision_items:
+    # --- 2. Vision API 兜底 ---
+    vision = _ai_vision_ocr_extract(image_b64)
+    if vision:
         lines = []
+        collected_at = ""
+        if isinstance(vision, dict):
+            collected_at = str(vision.get("collected_at") or "").strip()
+            vision_items = vision.get("indicators") or []
+        else:  # 兼容旧格式：模型直接返回指标数组
+            vision_items = vision
         for ind in vision_items:
             name = ind.get("name_raw", "")
             val = ind.get("value", "")
@@ -1395,9 +1420,18 @@ def _ocr_extract_image(image_b64: str) -> str:
             if ref:
                 line += f" {ref}"
             lines.append(line)
-        return "\n".join(lines)
+        if collected_at:
+            # 让 _detect_report_date 的「采集」关键词能命中 —— 视觉兜底
+            # 此前只回传指标行，日期识别在这条路径上是断的。
+            lines.append(f"采集时间：{collected_at}")
+        from .ocr_layout import redact_pii_text as _red
+        text, n_red = _red("\n".join(lines))
+        return {
+            "text": text, "engine": "vision",
+            "rotation": 0, "layout": "single", "n_redacted": n_red,
+        }
 
-    return ""
+    return {"text": "", "engine": "none", "rotation": 0, "layout": "single", "n_redacted": 0}
 
 
 def _ai_vision_ocr_extract(image_b64: str) -> list:
@@ -1424,9 +1458,16 @@ def _ai_vision_ocr_extract(image_b64: str) -> list:
             media_type = "image/webp"
 
     prompt_text = (
-        "你是一位专业医学检验单 OCR 识别员。识别图片中的所有临床检验指标名称、数值和单位。\n"
-        "严格只返回 JSON 格式在 Markdown codeblock 中：\n"
-        '[{"name_raw": "丙氨酸氨基转移酶(ALT)", "value": 68, "unit": "U/L", "reference": "9-50"}]'
+        "你是一位专业医学检验单 OCR 识别员。任务：\n"
+        "1. 图片可能整体旋转了 90°/180°/270°，请按正确阅读方向理解后再抄录；\n"
+        "2. 化验单可能是左右双栏排版，务必按表格行把【项目-结果-参考区间-单位】\n"
+        "   正确配对，绝不能把左栏的项目配右栏的数值；\n"
+        "3. 忽略化验单纸张之外的一切背景文字（报纸、宣传页、手指等）；\n"
+        "4. 抄录『采集时间/采样时间』的日期（没有则留空字符串）；\n"
+        "5. 不要输出姓名等个人信息。\n"
+        "严格只返回如下 JSON（Markdown codeblock 中）：\n"
+        '{"collected_at": "2025/10/06", "indicators": '
+        '[{"name_raw": "丙氨酸氨基转移酶(ALT)", "value": 68, "unit": "U/L", "reference": "9-50"}]}'
     )
 
     try:
@@ -1468,6 +1509,8 @@ def _ai_vision_ocr_extract(image_b64: str) -> list:
             txt = re.sub(r"^```[a-z]*\s*", "", txt, flags=re.MULTILINE)
             txt = re.sub(r"\s*```$", "", txt, flags=re.MULTILINE)
             parsed = json.loads(txt)
+            if isinstance(parsed, dict) and parsed.get("indicators"):
+                return parsed
             if isinstance(parsed, list) and len(parsed) > 0:
                 return parsed
     except Exception as err:

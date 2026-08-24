@@ -110,6 +110,8 @@ const tierColor = (tier) => token("--t" + (TIER_IDX[tier] || 1));
 
 /* ---------------- 导航 ---------------- */
 function go(page) {
+  // 自动流转倒计时进行中，用户任何手动切页都视为接管，取消自动跳转
+  if (state.autoTimer && !state._autoNav) cancelAutoJump();
   $$(".navbtn").forEach((b) => b.setAttribute("aria-current", String(b.dataset.go === page)));
   $$(".page").forEach((p) => p.classList.toggle("on", p.id === "page-" + page));
   window.scrollTo({ top: 0, behavior: "instant" });
@@ -189,11 +191,12 @@ function age(birth) {
 }
 
 async function selectPatient(pid, jump) {
+  cancelAutoJump();               // 切换患者必须终止上一位的自动评估倒计时
   state.pid = pid;
   state.patient = state.patients.find((p) => p.patient_id === pid) || null;
   state.trend = null; state.predicted = false; state.followedUp = false;
   state.reports = null; state.timeline = null; state.riskTimeline = null;
-  state.pending = []; state.lastPredict = null;
+  state.pending = []; state.lastPredict = null; state.batchCount = 0;
   store.set("drp.pid", pid);
 
   renderCtx();
@@ -412,6 +415,9 @@ $("#repImage").addEventListener("change", async (e) => {
         detected: !!ocr.detected_date,
         src: ocr.detected_date_source || "",
         nlines: ocr.count || 0,
+        rot: ocr.rotation || 0,
+        layout: ocr.layout || "single",
+        nred: ocr.n_redacted || 0,
       });
       renderPending();
     } catch (err) {
@@ -436,6 +442,10 @@ function renderPending() {
     <div class="pend" data-pend="${p.id}">
       <div class="pend-head">
         <span class="pend-name" title="${esc(p.name)}">${esc(p.name)}</span>
+        ${p.rot ? `<span class="tag cool">已自动转正 ${p.rot}°</span>` : ""}
+        ${p.layout === "two_panel" ? `<span class="tag line">双栏已逐行拆分</span>` : ""}
+        ${p.nred ? `<span class="tag line">已脱敏 ${p.nred} 处</span>` : ""}
+        <button class="btn ghost sm" data-pv="${p.id}">识别预览</button>
         <span class="muted">识别 ${p.nlines} 行文本</span>
       </div>
       <div class="pend-date">
@@ -448,6 +458,17 @@ function renderPending() {
         <button class="btn ghost sm" data-rm="${p.id}">移除</button>
       </div>
     </div>`).join("");
+  $$("#pendingList [data-pv]").forEach((b) =>
+    b.addEventListener("click", () => {
+      const it = state.pending.find((p) => p.id === b.dataset.pv);
+      if (!it) return;
+      $("#dlgReportMeta").textContent =
+        `${it.name} · 识别 ${it.nlines} 行` +
+        (it.rot ? ` · 已自动转正 ${it.rot}°` : "") +
+        (it.layout === "two_panel" ? " · 双栏已拆分" : "");
+      $("#dlgReportText").textContent = it.text;
+      $("#dlgReport").showModal();
+    }));
   $$("#pendingList [data-ok]").forEach((b) =>
     b.addEventListener("click", () => confirmPending(b.dataset.ok)));
   $$("#pendingList [data-rm]").forEach((b) =>
@@ -469,10 +490,21 @@ async function confirmPending(id, silent = false) {
   try {
     const r = await parseAndIngestText(it.text, it.date);
     if (!r) return false;
+    state.batchCount = (state.batchCount || 0) + 1;
     state.pending = state.pending.filter((p) => p.id !== id);
     renderPending();
-    if (!silent) toast(`「${it.name}」已入库 ${r.stored} 项（检查日期 ${it.date}）`);
-    if (!state.pending.length) await afterBatchIngest();
+    // V3.1 用户反馈："第二张还是 17 条，不知道是不是只识别到一张"。
+    // 每次入库都把【本份 + 累计】一起说清楚。
+    const sum = state.reports?.summary || {};
+    if (!silent)
+      toast(`「${it.name}」已入库 ${r.stored} 项（${it.date}）· ` +
+            `累计 ${sum.n_reports ?? "?"} 份 / ${sum.n_stored_total ?? "?"} 条指标`);
+    if (r.stored === 0)
+      toast(`「${it.name}」未识别到可入库的指标，可点「查看原文」核对识别结果`, true);
+    if (!state.pending.length) {
+      const n = state.batchCount; state.batchCount = 0;
+      await afterBatchIngest(n);
+    }
     return true;
   } catch (e) { toast(`「${it.name}」入库失败：${e.message}`, true); return false; }
 }
@@ -491,13 +523,60 @@ $("#btnConfirmAll").addEventListener("click", async () => {
   }
   $("#parseStat").textContent = "";
   btn.disabled = false;
-  toast(`批量入库完成：成功 ${ok} 份`);
+  const sum = state.reports?.summary || {};
+  toast(`批量入库完成：本次 ${ok} 份 · 累计 ${sum.n_reports ?? "?"} 份报告 / ${sum.n_stored_total ?? "?"} 条指标`);
 });
 
-/** 批量导入完成后的收尾：滚到时间轴确认；若已有历史预测则自动比较。 */
-async function afterBatchIngest() {
-  $("#sec-timeline").scrollIntoView({ behavior: "smooth", block: "start" });
-  if (state.patient?.last_predicted_at) await autoCompareWithLast();
+/** 批量导入完成后的收尾（V3.1 用户反馈："先要趋势，然后自动跳转到评估"）：
+    ① 跳到趋势页，让用户先看到按真实检查日期画出的指标曲线；
+    ② 顶部横幅倒计时，自动进入评估页并运行预测（可点「留在本页」取消，
+       任何手动切页也会取消 —— 自动流转不许和用户抢方向盘）。 */
+async function afterBatchIngest(nNew) {
+  cancelAutoJump();
+  go("trend");
+  await loadTrend(true);
+  const sum = state.reports?.summary || {};
+  const banner = $("#trendAutoBanner");
+  let left = 8;
+  const text = () =>
+    `<b>✓ 本次入库 ${nNew} 份</b> · 累计 ${sum.n_reports ?? "—"} 份报告 / ` +
+    `${sum.n_stored_total ?? "—"} 条指标。先看看各指标的历史趋势，` +
+    `<b>${left}</b> 秒后自动进入风险评估。` +
+    `<span class="tb-ops"><button class="btn sm" id="tbGoNow">立即评估</button>` +
+    `<button class="btn ghost sm" id="tbStay">留在本页</button></span>`;
+  banner.hidden = false;
+  banner.innerHTML = text();
+  const bind = () => {
+    $("#tbGoNow").onclick = () => runAutoAssess();
+    $("#tbStay").onclick = () => cancelAutoJump(true);
+  };
+  bind();
+  state.autoTimer = setInterval(() => {
+    left -= 1;
+    if (left <= 0) return runAutoAssess();
+    banner.innerHTML = text();
+    bind();
+  }, 1000);
+}
+
+function cancelAutoJump(byUser = false) {
+  if (state.autoTimer) { clearInterval(state.autoTimer); state.autoTimer = null; }
+  const b = $("#trendAutoBanner");
+  if (b) {
+    if (byUser) {
+      b.innerHTML = `已留在趋势页。看完随时可去评估页点「运行纵向风险分析」。`;
+      setTimeout(() => { b.hidden = true; }, 4000);
+    } else b.hidden = true;
+  }
+}
+
+async function runAutoAssess() {
+  cancelAutoJump();
+  state._autoNav = true;
+  go("work");
+  state._autoNav = false;
+  $("#sec-predict").scrollIntoView({ behavior: "smooth", block: "start" });
+  await doPredict({ fromAuto: true });
 }
 
 /* ---------------- 填充示例 ---------------- */
@@ -711,29 +790,53 @@ $$("#concernChips .chip").forEach((b) => b.addEventListener("click", () => {
   $$("#concernChips .chip").forEach((x) => x.classList.toggle("on", x === b));
 }));
 
-$("#btnPredict").addEventListener("click", async () => {
-  if (!state.pid) return toast("先在「患者」里选一位", true);
+/** 取"上一次预测"的 3 年风险概率（用于本次预测后的自动比较）。
+    来源优先级：本会话里刚做过的预测 → 审计走势的最后一个点。 */
+async function getPrevRiskProb() {
+  const fromLast = state.lastPredict?.results?.find((x) => x.horizon === "3y");
+  if (fromLast) return fromLast.probability;
+  if (!state.patient?.last_predicted_at) return null;
+  try {
+    const t = state.trend ||
+      (await api(`/patients/${encodeURIComponent(state.pid)}/trend`));
+    state.trend = t;
+    const pts = t.risk_trajectories?.["3y"]?.points;
+    if (pts && pts.length) return pts[pts.length - 1].probability;
+  } catch { /* 拿不到就不比较，预测本身照常 */ }
+  return null;
+}
+
+/** 运行一次风险预测（改动 V3.1：手动点击与"趋势页倒计时自动评估"共用）。
+    fromAuto 只影响文案；比较逻辑：只要存在上一次预测就自动给出 改善/稳定/升高。 */
+async function doPredict({ fromAuto = false } = {}) {
+  if (!state.pid) { toast("先在「患者」里选一位", true); return; }
   const btn = $("#btnPredict");
   btn.disabled = true;
   $("#predStat").innerHTML = `<span class="spinner"></span> 读取全部历史数据 → 时序特征管线 → 多时程推理中…`;
   try {
+    const prevProb = await getPrevRiskProb();   // 必须在预测前取，否则比到自己
     const r = await api("/predict", {
       method: "POST", body: { patient_id: state.pid, concern: state.concern },
     });
     $("#predStat").textContent = "";
     renderPredict(r);
     state.predicted = true;
-    state.trend = null; state.riskTimeline = null;
+    state.riskTimeline = null;
     await loadTraces();
     await refreshPatients();
     state.patient = state.patients.find((p) => p.patient_id === state.pid);
+    if (prevProb != null) renderAutoCompare(prevProb, r);
     renderFollowupPlain();
+    renderLifestyle().catch(() => {});   // ④ 摘要异步补上，不阻塞预测结果展示
     updateSteps();
+    if (fromAuto) toast("已基于全部历史数据完成本次风险评估");
   } catch (e) {
     $("#predStat").textContent = "";
     toast(e.message, true);
   } finally { btn.disabled = false; }
-});
+}
+
+$("#btnPredict").addEventListener("click", () => doPredict());
 
 const RANK_TONE = { 1: "t4", 2: "t3", 3: "t2" };
 
@@ -764,6 +867,8 @@ function renderOverview(r) {
       </div>
       <div class="muted" style="margin:2px 0 6px">为什么排在这里：${esc(it.why)}</div>
       <ul class="ov-inds">${inds}</ul>
+      ${it.direction ? `<div class="ov-dir">若长期未干预，可能向<b>${esc(it.direction)}</b>方向发展
+        <span class="muted">（风险提示，非诊断）</span></div>` : ""}
     </div>`;
   }).join("");
   const stable = (ov.stable_groups && ov.stable_groups.length)
@@ -803,6 +908,13 @@ function selectHorizon(h) {
 
   $("#modelJudge").innerHTML =
     `模型判断：未来 <b>${esc(hCn)}</b>内属于「<b style="color:${color}">${esc(main.risk_tier)}</b>」风险区间`;
+
+  // V3.1 用户反馈"60.2 看不懂"：把概率翻译成频数表述，认知负担最低。
+  const n = Math.round(main.probability * 100);
+  $("#heroPlain").innerHTML =
+    `怎么理解这个数：100 位指标情况与你相近的人里，模型估计约 <b>${n} 位</b>` +
+    `会在未来${esc(hCn)}内出现上述目标风险事件，约 ${100 - n} 位不会。` +
+    `这是概率估计，不是对某个人的确定结论。`;
 
   // 三个时间窗口做成可点行（改动 4）
   $("#horizonMini").innerHTML = r.results.map((x) => {
@@ -962,44 +1074,62 @@ function renderFollowupPlain() {
 }
 
 /** 上传新报告后自动比较（改动 8）：跑一次新预测，与上一次的 3 年风险比。 */
-async function autoCompareWithLast() {
-  if (!state.pid) return;
-  try {
-    // 取"上一次"基线：审计走势里 3y 的最后一个点（本次上传之前的最近预测）
-    const trendBefore = await api(`/patients/${encodeURIComponent(state.pid)}/trend`);
-    const prevPts = trendBefore.risk_trajectories?.["3y"]?.points || [];
-    if (!prevPts.length) return;
-    const prev = prevPts[prevPts.length - 1];
+/** 本次 vs 上次评估的自动比较横幅。±2 个百分点内视为稳定。
+    prevProb 由 doPredict 在发起预测【之前】捕获，避免"和自己比"。 */
+function renderAutoCompare(prevProb, r) {
+  const curr = r.results.find((x) => x.horizon === "3y") || r.results[0];
+  const dpp = (curr.probability - prevProb) * 100;
+  let verdict, cls;
+  if (dpp <= -2) { verdict = "改善"; cls = "good"; }
+  else if (dpp >= 2) { verdict = "升高"; cls = "bad"; }
+  else { verdict = "稳定"; cls = "flat"; }
+  const box = $("#autoCompareBox");
+  box.hidden = false;
+  box.className = "autocompare " + cls;
+  box.innerHTML =
+    `自动比较：3 年风险 ${pct1(prevProb)}（上次评估）` +
+    ` → ${pct1(curr.probability)}（本次），<b>${verdict}</b>` +
+    `（变化 ${dpp > 0 ? "+" : ""}${dpp.toFixed(1)} 个百分点）`;
+  toast(`与上次评估相比：风险${verdict}`);
+}
 
-    toast("检测到新报告，正在自动与上次评估比较…");
-    const r = await api("/predict", {
-      method: "POST", body: { patient_id: state.pid, concern: state.concern },
-    });
-    renderPredict(r);
-    state.predicted = true;
-    state.trend = null; state.riskTimeline = null;
-    await loadTraces(); await refreshPatients();
-    state.patient = state.patients.find((p) => p.patient_id === state.pid);
-    renderFollowupPlain();
-    updateSteps();
-
-    const curr = r.results.find((x) => x.horizon === "3y") || r.results[0];
-    const dpp = (curr.probability - prev.probability) * 100;
-    let verdict, cls;
-    if (dpp <= -2) { verdict = "改善"; cls = "good"; }
-    else if (dpp >= 2) { verdict = "升高"; cls = "bad"; }
-    else { verdict = "稳定"; cls = "flat"; }
-    const box = $("#autoCompareBox");
-    box.hidden = false;
-    box.className = "autocompare " + cls;
-    box.innerHTML =
-      `自动比较：3 年风险 ${pct1(prev.probability)}（${esc(String(prev.at).slice(0, 10))}）` +
-      ` → ${pct1(curr.probability)}（本次），<b>${verdict}</b>` +
-      `（变化 ${dpp > 0 ? "+" : ""}${dpp.toFixed(1)} 个百分点）`;
-    toast(`与上次相比：风险${verdict}`);
-  } catch (e) {
-    toast("自动比较失败：" + e.message, true);
+/** ④ 生活方式建议摘要（V3.1 用户反馈："除了就医建议还应有运动、饮食"）。
+    内容取自趋势页 AI 深度分析的饮食/运动章节 —— 同一份数据只生成一次，
+    预测页给摘要，完整方案仍在「趋势 → AI 深度分析」。AI 只解释，不造概率。 */
+async function renderLifestyle() {
+  const box = $("#lifestyleBox");
+  if (!box || !state.pid) return;
+  let t = state.trend;
+  if (!t) {
+    try {
+      t = await api(`/patients/${encodeURIComponent(state.pid)}/trend`);
+      state.trend = t;
+    } catch { box.innerHTML = ""; return; }
   }
+  const ai = t.ai_analysis;
+  const pick = (arr, nGroups, nItems) => (arr || []).slice(0, nGroups)
+    .map((g) => ({ title: g.title, items: (g.items || []).slice(0, nItems) }))
+    .filter((g) => g.items.length);
+  const diet = pick(ai?.diet_interventions, 2, 2);
+  const life = pick(ai?.lifestyle_interventions, 1, 3);
+  const cell = (icon, title, groups) => !groups.length ? "" : `
+    <div class="ls-cell">
+      <div class="ls-t">${icon} ${title}</div>
+      ${groups.map((g) => `<div class="ls-g"><b>${esc(g.title)}</b>
+        <ul>${g.items.map((i) => `<li>${esc(i)}</li>`).join("")}</ul></div>`).join("")}
+    </div>`;
+  const inner = cell("🥗", "饮食要点", diet) + cell("🏃", "运动与生活方式", life);
+  box.innerHTML = `
+    <h3 class="blocktitle" style="margin-top:0">生活方式建议（摘要）</h3>
+    ${inner ? `<div class="ls-grid">${inner}</div>`
+            : `<p class="muted">累计更多检查数据后，这里会给出针对性的饮食与运动要点。</p>`}
+    <button class="btn ghost sm" id="btnFullAI" style="margin-top:10px">
+      查看完整 AI 深度分析（机制 / 膳食 / 运动 / 随访日程）→</button>`;
+  $("#btnFullAI").onclick = () => {
+    go("trend");
+    setTimeout(() => $("#sec-trend-interventions")
+      .scrollIntoView({ behavior: "smooth", block: "start" }), 80);
+  };
 }
 
 /* ---------------- 步骤状态（4 步） ---------------- */

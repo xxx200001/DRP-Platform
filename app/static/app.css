@@ -780,3 +780,51 @@ details.fold > summary:hover { color: var(--ink); }
   border-radius: var(--radius-sm); padding: 12px; margin: 0;
   font: 12.5px/1.6 var(--mono); color: var(--ink-2);
 }
+
+/* ================= V3.1 · 体验反馈修复 ================= */
+
+/* 待确认卡片：新增标签较多，允许换行 */
+.pend-head { flex-wrap: wrap; row-gap: 4px; }
+.pend-head .muted { margin-left: auto; }
+
+/* 趋势页顶部：入库完成 → 倒计时自动进入评估 的流转横幅 */
+.trend-banner {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  margin: 0 0 18px; padding: 12px 16px;
+  background: var(--t1-bg); color: var(--t1);
+  border: 1px solid color-mix(in srgb, var(--t1) 30%, transparent);
+  border-radius: var(--radius-sm); font-size: 13.5px; line-height: 1.6;
+}
+.trend-banner .tb-ops { margin-left: auto; display: flex; gap: 8px; }
+
+/* 概率的人话解释（频数表述） */
+.hero-plain {
+  margin: 4px 0 14px; padding: 10px 14px;
+  background: var(--surface-2); border-left: 3px solid var(--ink-3);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  font-size: 13px; line-height: 1.7; color: var(--ink-2);
+}
+
+/* 总览每项：可能的疾病发展方向（风险提示，非诊断） */
+.ov-dir {
+  margin-top: 6px; padding: 7px 10px;
+  background: var(--t2-bg); color: var(--t2);
+  border-radius: var(--radius-sm); font-size: 12.5px; line-height: 1.6;
+}
+.ov-dir b { color: inherit; }
+
+/* ④ 生活方式建议摘要（饮食 / 运动两栏） */
+.ls-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+.ls-cell {
+  background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: var(--radius-sm); padding: 12px 14px;
+}
+.ls-t { font-weight: 700; font-size: 13.5px; margin-bottom: 8px; }
+.ls-g { font-size: 12.5px; line-height: 1.65; color: var(--ink-2); }
+.ls-g + .ls-g { margin-top: 8px; }
+.ls-g b { color: var(--ink); }
+.ls-g ul { margin: 3px 0 0; padding-left: 18px; }
+.ls-g li { margin: 2px 0; }

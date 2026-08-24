@@ -315,6 +315,24 @@ class LabReportParser:
             # 6.5×10^9/L 里的 ×/x 是数值科学计数的乘号，不是单位的一部分
             if re.match(r"^[x×]10", unit):
                 unit = unit[1:]
+        if unit is None:
+            # V3.1 兜底：真实报告的列序常为「结果 参考区间 单位」，值后紧跟的是
+            # 裸单侧区间（"4.0 <10.0 μmol/L"，无"参考"前缀故未被上面摘走），
+            # 单位落在更后面。此时在剩余文本里【以空白为界】向后找第一个单位
+            # 样 token。只在起始匹配失败时才启用，不改变既有行为。
+            um2 = re.search(
+                r"(?:(?<=\s)|^)(?P<unit>(?:[x×]?10\^?\d{1,2}/L)"
+                r"|(?:[A-Za-zμµ%][A-Za-zμµ%0-9^/·.\-]{0,13}))",
+                rest,
+            )
+            if um2:
+                cand = um2.group("unit").strip()
+                if re.match(r"^[x×]10", cand):
+                    cand = cand[1:]
+                # 孤立的 H/L 是高低标记不是单位（行中位置的 H/L 有意不摘，见
+                # _FLAG_HL_END 注释），兜底搜索必须跳过它们。
+                if not re.fullmatch(r"[HLhl]", cand):
+                    unit = cand
         if unit is None and ("%" in name_region or "%" in line):
             unit = "%"
 
@@ -445,7 +463,15 @@ class LabReportParser:
 def _preprocess(raw: str) -> str:
     """半角化、OCR 标点修复、序号清理、空白规整。"""
     s = raw.strip()
-    s = re.sub(r"^\s*\d+[\.、:：]\s*", "", s)       # 移除开头的行号序号 1. 2、等
+    # 序号剥离（两条规则各管一种形态，均不许伤及真实数值）：
+    #   "1. 总胆汁酸" / "2、总胆红素"  —— 点号/顿号序号。(?!\d) 是 V3.1 修复：
+    #   此前 "4.07 mmol/L" 这种以数值开头的行会被吃掉 "4."，值变成 07。
+    s = re.sub(r"^\s*\d+[\.、:：](?!\d)\s*", "", s)
+    # V3.1：真实化验单照片里，序号列是独立的 OCR 框，重排后得到"1 总胆汁酸
+    # 4.0 <10.0 μmol/L"——裸序号后跟空格再跟指标名。不摘掉它，取值逻辑抓到的
+    # 第一个数字就是序号本身（值=1），整行报废。只在后随非数字内容时移除，
+    # "4.07 mmol/L"这类以真实数值开头的行不受影响。
+    s = re.sub(r"^\s*\d{1,3}\s+(?=[^\d\s.,，-])", "", s)
     s = re.sub(r"^[\[\(\（【][HL↑↓+ -]+[\]\)\）】]\s*", "", s)  # 移除开头的 [H] 等标记
     s = to_halfwidth(s)
     s = s.replace("×", "x")
