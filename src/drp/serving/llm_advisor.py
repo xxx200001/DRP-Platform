@@ -138,8 +138,55 @@ def _call_anthropic(api_key: str, base_url: str, model: str,
         return None
 
 
+def _call_gemini_native(api_key: str, base_url: str, model: str,
+                        prompt: str, system_prompt: str,
+                        timeout: float = 25.0) -> str | None:
+    """调用 Google Gemini 原生规范接口 (/v1beta/models/{model}:generateContent)。"""
+    b = base_url.rstrip("/")
+    if ":generateContent" in b:
+        url = b
+    elif b.endswith("/v1beta"):
+        url = f"{b}/models/{model}:generateContent"
+    elif b.endswith("/v1"):
+        url = f"{b.rstrip('/v1')}/v1beta/models/{model}:generateContent"
+    else:
+        url = f"{b}/v1beta/models/{model}:generateContent"
+
+    headers = {
+        "x-goog-api-key": api_key,
+        "Content-Type": "application/json",
+        "User-Agent": "SoulHealth-DRP/3.5",
+    }
+    full_prompt = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
+    payload = {
+        "contents": [
+            {"role": "user", "parts": [{"text": full_prompt}]}
+        ],
+        "generationConfig": {
+            "temperature": 0.3,
+            "maxOutputTokens": 2048,
+        },
+    }
+    try:
+        req = urllib.request.Request(
+            url, data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            headers=headers, method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            candidates = data.get("candidates") or []
+            if candidates:
+                parts = candidates[0].get("content", {}).get("parts") or []
+                if parts:
+                    return parts[0].get("text", "").strip()
+            return None
+    except Exception as e:
+        logger.info("[LLM] 外部 Gemini 原生接口不可用 (%s)，切换至备用", str(e))
+        return None
+
+
 def call_llm(prompt: str, system_prompt: str) -> str | None:
-    """按环境配置调用在线大模型；支持 Anthropic 与 OpenAI 协议自动切换容灾，全部不可用时返回 None 走内置引擎。"""
+    """按环境配置调用在线大模型；支持 Anthropic、OpenAI、Gemini 原生协议自动切换容灾，全部不可用时返回 None 走内置引擎。"""
     env = resolve_llm_env()
     if env.get("anthropic_key"):
         res = _call_anthropic(env["anthropic_key"], env["anthropic_base"], env["anthropic_model"],
@@ -149,6 +196,13 @@ def call_llm(prompt: str, system_prompt: str) -> str | None:
     if env.get("openai_key"):
         res = _call_openai_compatible(env["openai_key"], env["openai_base"], env["openai_model"],
                                       prompt, system_prompt, timeout=env["timeout"])
+        if res:
+            return res
+    gemini_key = (os.environ.get("GEMINI_API_KEY") or env.get("openai_key") or env.get("anthropic_key") or "").strip()
+    gemini_base = os.environ.get("GEMINI_BASE_URL", "https://daodun.cc")
+    gemini_model = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+    if gemini_key and "change-me" not in gemini_key:
+        res = _call_gemini_native(gemini_key, gemini_base, gemini_model, prompt, system_prompt, timeout=env["timeout"])
         if res:
             return res
     return None

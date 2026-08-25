@@ -2068,4 +2068,61 @@ def _ai_vision_ocr_extract(image_b64: str) -> list | dict:
         except Exception as err:
             logger.warning("[OCR] OpenAI/Gemini Vision 备选通道异常 (%s)", err)
 
+    # --- 通道 3: Google Gemini 原生 /v1beta/models/{model}:generateContent 协议 ---
+    gemini_key = (os.environ.get("GEMINI_API_KEY") or openai_key or anthropic_key).strip()
+    gemini_base = (os.environ.get("GEMINI_BASE_URL") or "https://daodun.cc").rstrip("/")
+    gemini_model = os.environ.get("GEMINI_VISION_MODEL", "gemini-2.0-flash")
+    if gemini_key and "change-me" not in gemini_key:
+        try:
+            gb = gemini_base
+            if ":generateContent" in gb:
+                url = gb
+            elif gb.endswith("/v1beta"):
+                url = f"{gb}/models/{gemini_model}:generateContent"
+            elif gb.endswith("/v1"):
+                url = f"{gb.rstrip('/v1')}/v1beta/models/{gemini_model}:generateContent"
+            else:
+                url = f"{gb}/v1beta/models/{gemini_model}:generateContent"
+
+            headers = {
+                "x-goog-api-key": gemini_key,
+                "content-type": "application/json",
+                "User-Agent": "SoulHealth-DRP/3.5",
+            }
+            req_body = {
+                "contents": [
+                    {
+                        "role": "user",
+                        "parts": [
+                            {
+                                "inline_data": {
+                                    "mime_type": media_type,
+                                    "data": clean_b64,
+                                }
+                            },
+                            {"text": prompt_text},
+                        ],
+                    }
+                ],
+            }
+            req = urllib.request.Request(
+                url,
+                data=json.dumps(req_body).encode("utf-8"),
+                headers=headers,
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=25) as resp:
+                res_data = json.loads(resp.read().decode("utf-8"))
+                candidates = res_data.get("candidates") or []
+                if candidates:
+                    parts = candidates[0].get("content", {}).get("parts") or []
+                    if parts:
+                        txt = parts[0].get("text", "")
+                        res = _parse_response_text(txt)
+                        if res:
+                            logger.info("[OCR] Gemini Native Vision (%s) 识别成功", gemini_model)
+                            return res
+        except Exception as err:
+            logger.warning("[OCR] Gemini Native Vision 异常 (%s)", err)
+
     return []
