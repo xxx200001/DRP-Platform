@@ -32,7 +32,7 @@ def is_port_open(port: int, host: str = "127.0.0.1") -> bool:
         return s.connect_ex((host, port)) == 0
 
 
-PORT = 8001 if is_port_open(8001) else (8000 if is_port_open(8000) else 8001)
+PORT = 8000 if is_port_open(8000) else (8008 if is_port_open(8008) else 8000)
 LOCAL_URL = f"http://127.0.0.1:{PORT}"
 
 
