@@ -82,7 +82,8 @@ def _call_openai_compatible(api_key: str, base_url: str, model: str,
                             prompt: str, system_prompt: str,
                             timeout: float = 25.0) -> str | None:
     """调用兼容 OpenAI 规范的大模型接口 (如 DeepSeek, OpenAI, 通义千问等)。"""
-    url = base_url.rstrip("/") + "/chat/completions"
+    b = base_url.rstrip("/")
+    url = f"{b}/chat/completions" if b.endswith("/v1") else f"{b}/v1/chat/completions"
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     payload = {
         "model": model,
@@ -110,7 +111,8 @@ def _call_anthropic(api_key: str, base_url: str, model: str,
                     prompt: str, system_prompt: str,
                     timeout: float = 25.0) -> str | None:
     """调用 Anthropic Claude 规范接口。"""
-    url = base_url.rstrip("/") + "/v1/messages"
+    b = base_url.rstrip("/")
+    url = f"{b}/messages" if b.endswith("/v1") else f"{b}/v1/messages"
     headers = {
         "x-api-key": api_key,
         "anthropic-version": "2023-06-01",

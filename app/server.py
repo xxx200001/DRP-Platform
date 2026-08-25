@@ -1793,7 +1793,8 @@ def _ai_vision_ocr_extract(image_b64: str) -> list | dict:
     # --- 通道 1: Anthropic 原生 /v1/messages 协议 ---
     if anthropic_key and "change-me" not in anthropic_key:
         try:
-            url = f"{anthropic_base}/v1/messages"
+            ab = anthropic_base.rstrip("/")
+            url = f"{ab}/messages" if ab.endswith("/v1") else f"{ab}/v1/messages"
             headers = {
                 "x-api-key": anthropic_key,
                 "anthropic-version": "2023-06-01",
@@ -1839,7 +1840,8 @@ def _ai_vision_ocr_extract(image_b64: str) -> list | dict:
     # --- 通道 2: OpenAI / Gemini / OneAPI /v1/chat/completions 协议 ---
     if openai_key and "change-me" not in openai_key:
         try:
-            url = f"{openai_base}/v1/chat/completions"
+            ob = openai_base.rstrip("/")
+            url = f"{ob}/chat/completions" if ob.endswith("/v1") else f"{ob}/v1/chat/completions"
             headers = {
                 "Authorization": f"Bearer {openai_key}",
                 "content-type": "application/json",
