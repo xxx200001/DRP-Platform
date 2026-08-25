@@ -66,6 +66,124 @@ async function api(path, opts = {}) {
   return res.json();
 }
 
+/**
+ * V3.7：自动校正图片方向。
+ * 手机拍照通常把旋转信息存在 EXIF Orientation 字段里，像素本身不旋转。
+ * 直接发给 OCR 会导致图片横着/倒着。这里读取 EXIF 旋转信息，
+ * 用 Canvas 把图片像素真正旋转到正确方向后再输出 base64。
+ */
+async function autoCorrectOrientation(dataUrl) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      // 读取 EXIF orientation
+      const orientation = getExifOrientation(dataUrl);
+      // 如果无旋转信息或为正常方向，直接返回
+      if (!orientation || orientation <= 1) {
+        resolve(dataUrl);
+        return;
+      }
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      const w = img.naturalWidth, h = img.naturalHeight;
+
+      // 根据 EXIF orientation 设置 canvas 尺寸和变换
+      // orientation 值含义：
+      // 1=正常, 2=水平翻转, 3=旋转180°, 4=垂直翻转
+      // 5=顺时针90°+水平翻转, 6=顺时针90°, 7=逆时针90°+水平翻转, 8=逆时针90°
+      if (orientation >= 5 && orientation <= 8) {
+        canvas.width = h; canvas.height = w;
+      } else {
+        canvas.width = w; canvas.height = h;
+      }
+
+      switch (orientation) {
+        case 2: ctx.transform(-1, 0, 0, 1, w, 0); break;
+        case 3: ctx.transform(-1, 0, 0, -1, w, h); break;
+        case 4: ctx.transform(1, 0, 0, -1, 0, h); break;
+        case 5: ctx.transform(0, 1, 1, 0, 0, 0); break;
+        case 6: ctx.transform(0, 1, -1, 0, h, 0); break;
+        case 7: ctx.transform(0, -1, -1, 0, h, w); break;
+        case 8: ctx.transform(0, -1, 1, 0, 0, w); break;
+      }
+      ctx.drawImage(img, 0, 0);
+
+      // 输出质量 0.92 的 JPEG（比原图略小，加速上传）
+      resolve(canvas.toDataURL("image/jpeg", 0.92));
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
+/**
+ * 从 base64 JPEG 数据中快速读取 EXIF Orientation 值。
+ * 不引入第三方库，直接解析 JPEG 的 APP1 (EXIF) 段。
+ */
+function getExifOrientation(dataUrl) {
+  try {
+    const b64 = dataUrl.split(",")[1];
+    if (!b64) return 0;
+    // 只需读前 64KB 就够找到 EXIF
+    const bin = atob(b64.slice(0, 87380)); // ~64KB base64 -> ~64KB binary
+    const len = bin.length;
+    // JPEG 必须以 FF D8 开头
+    if (bin.charCodeAt(0) !== 0xFF || bin.charCodeAt(1) !== 0xD8) return 0;
+
+    let offset = 2;
+    while (offset < len - 1) {
+      const marker = (bin.charCodeAt(offset) << 8) | bin.charCodeAt(offset + 1);
+      offset += 2;
+      // APP1 = FF E1（EXIF 数据段）
+      if (marker === 0xFFE1) {
+        const segLen = (bin.charCodeAt(offset) << 8) | bin.charCodeAt(offset + 1);
+        // "Exif\0\0" header
+        if (bin.slice(offset + 2, offset + 6) !== "Exif") return 0;
+        const tiffStart = offset + 8;
+        const byteOrder = bin.slice(tiffStart, tiffStart + 2);
+        const le = byteOrder === "II"; // little-endian
+
+        const read16 = (o) => le
+          ? bin.charCodeAt(o) | (bin.charCodeAt(o + 1) << 8)
+          : (bin.charCodeAt(o) << 8) | bin.charCodeAt(o + 1);
+
+        const ifdOffset = tiffStart + 4; // skip byte order + 42
+        const nEntries = read16(tiffStart + (le
+          ? (bin.charCodeAt(tiffStart + 4) | (bin.charCodeAt(tiffStart + 5) << 8)
+            | (bin.charCodeAt(tiffStart + 6) << 16) | (bin.charCodeAt(tiffStart + 7) << 24))
+          : ((bin.charCodeAt(tiffStart + 4) << 24) | (bin.charCodeAt(tiffStart + 5) << 16)
+            | (bin.charCodeAt(tiffStart + 6) << 8) | bin.charCodeAt(tiffStart + 7))));
+
+        // 简化：直接遍历 IFD0 找 tag 0x0112 (Orientation)
+        const firstIFDOffset = le
+          ? (bin.charCodeAt(tiffStart + 4) | (bin.charCodeAt(tiffStart + 5) << 8)
+            | (bin.charCodeAt(tiffStart + 6) << 16) | (bin.charCodeAt(tiffStart + 7) << 24))
+          : ((bin.charCodeAt(tiffStart + 4) << 24) | (bin.charCodeAt(tiffStart + 5) << 16)
+            | (bin.charCodeAt(tiffStart + 6) << 8) | bin.charCodeAt(tiffStart + 7));
+
+        const ifdStart = tiffStart + firstIFDOffset;
+        const entries = read16(ifdStart);
+        for (let i = 0; i < entries; i++) {
+          const entryOffset = ifdStart + 2 + i * 12;
+          const tag = read16(entryOffset);
+          if (tag === 0x0112) { // Orientation
+            return read16(entryOffset + 8);
+          }
+        }
+        return 0;
+      }
+      // 跳过其他段
+      if (marker === 0xFFDA) break; // SOS = 图像数据开始，不再有 EXIF
+      if ((marker & 0xFF00) !== 0xFF00) break;
+      const skip = (bin.charCodeAt(offset) << 8) | bin.charCodeAt(offset + 1);
+      offset += skip;
+    }
+    return 0;
+  } catch {
+    return 0;
+  }
+}
+
 const store = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch { /* 隐私模式下忽略 */ } },
@@ -417,7 +535,9 @@ $("#repImage").addEventListener("change", async (e) => {
         reader.onerror = fail;
         reader.readAsDataURL(file);
       });
-      const ocr = await api("/ocr", { method: "POST", body: { image: b64 } });
+      // V3.7：自动校正图片方向（EXIF 旋转 + 轻微倾斜）
+      const correctedB64 = await autoCorrectOrientation(b64);
+      const ocr = await api("/ocr", { method: "POST", body: { image: correctedB64 } });
       if (!ocr.text || !ocr.text.trim()) {
         toast(`「${file.name}」未识别到文字，已跳过`, true);
         continue;
@@ -1111,7 +1231,10 @@ function renderSystemRisks(r) {
   const abnormal = sorted.filter(x => x.level > 0);
   const normal = sorted.filter(x => x.level === 0);
 
-  let html = `<div class="sys-risk-title">🔬 分系统健康评估<span class="muted">（基于本次检查真实指标）</span></div>`;
+  // 选择展示的时程（默认 3y，回退到最后一个）
+  const showH = state.selHorizon || "3y";
+
+  let html = `<div class="sys-risk-title">🔬 分系统健康风险评估<span class="muted">（各系统独立风险估计 · 基于综合模型加权分配）</span></div>`;
 
   if (abnormal.length) {
     html += `<div class="sys-risk-grid">`;
@@ -1119,11 +1242,28 @@ function renderSystemRisks(r) {
       const color = LEVEL_COLORS[sr.level] || "#999";
       const bg = LEVEL_BG[sr.level] || "#fafafa";
       const icon = LEVEL_ICONS[sr.level] || "—";
-      const barW = Math.min(sr.level * 25, 100);
       const indHtml = (sr.indicators || []).map(ind =>
         `<span class="sys-ind">${esc(ind.name_cn)} <b>${ind.value}</b>${esc(ind.unit||"")}` +
         (ind.worsened ? ` <em class="worse">↑恶化</em>` : "") + `</span>`
       ).join("");
+
+      // V3.7: 该系统的独立风险概率
+      const rh = (sr.risk_by_horizon || {})[showH];
+      let probHtml = "";
+      if (rh) {
+        const pct = (rh.probability * 100).toFixed(1);
+        const tierColor2 = tierColor(rh.risk_tier);
+        const tierIdx = TIER_IDX[rh.risk_tier] || 1;
+        const barPct = Math.min(rh.probability * 100, 100);
+        probHtml = `
+          <div class="sys-prob-row">
+            <span class="sys-prob-val" style="color:${tierColor2}">${pct}%</span>
+            <span class="tag t${tierIdx}" style="font-size:11px">${esc(rh.risk_tier)}</span>
+            <span class="muted" style="font-size:11px;margin-left:4px">未来${esc(H_LABEL[showH] || showH)}</span>
+          </div>
+          <div class="sys-prob-bar"><i style="width:${barPct}%;background:${tierColor2}"></i></div>`;
+      }
+
       html += `
         <div class="sys-risk-card" style="border-left:3px solid ${color};background:${bg}">
           <div class="sys-risk-head">
@@ -1132,7 +1272,7 @@ function renderSystemRisks(r) {
             <span class="sys-level" style="color:${color}">${esc(sr.level_label)}</span>
             ${sr.department ? `<span class="sys-dept">→ ${esc(sr.department)}</span>` : ""}
           </div>
-          <div class="sys-bar"><i style="width:${barW}%;background:${color}"></i></div>
+          ${probHtml}
           ${indHtml ? `<div class="sys-inds">${indHtml}</div>` : ""}
           ${sr.direction ? `<div class="sys-dir">⚠ 若未干预：${esc(sr.direction)}</div>` : ""}
         </div>`;
@@ -1141,7 +1281,13 @@ function renderSystemRisks(r) {
   }
 
   if (normal.length) {
-    html += `<div class="sys-stable">✓ 稳定系统：${normal.map(x => esc(x.system)).join("、")}</div>`;
+    // 稳定系统也展示概率（很低）
+    const stableItems = normal.map(x => {
+      const rh = (x.risk_by_horizon || {})[showH];
+      const pctStr = rh ? `${(rh.probability * 100).toFixed(1)}%` : "";
+      return `${esc(x.system)}${pctStr ? ` <span class="muted">(${pctStr})</span>` : ""}`;
+    }).join("、");
+    html += `<div class="sys-stable">✓ 稳定系统：${stableItems}</div>`;
   }
 
   // AI 综合叙述
@@ -1435,9 +1581,6 @@ async function loadTrend(force = false, refreshAI = false) {
   renderAIAdvisor(t);
 }
 
-/* 风险走势（按真实检查日期回溯）：历史实线 + 未来预测虚线（改动 5/6）。
-   审计走势（按预测发生时间）保留给管理台复盘，不再作为用户侧曲线 ——
-   它在同一天连传 8 份报告时只会画出一条竖线/平线，正是本次要修的问题。 */
 /** 取回溯风险轨迹数据（评估页迷你图与趋势页大图共用，避免两处画法漂移）。 */
 async function ensureRiskTimeline() {
   if (!state.riskTimeline) {
@@ -1446,7 +1589,8 @@ async function ensureRiskTimeline() {
   return state.riskTimeline;
 }
 
-/** 组装 历史实线 + 未来虚线 的 echarts option。compact=true 给评估页迷你图。 */
+/** 组装 历史实线 + 未来虚线 的 echarts option。compact=true 给评估页迷你图。
+ *  V3.7：优化图例、线色、标注，让实线/虚线区别一目了然。*/
 function riskTimelineOption(rt, h, compact = false) {
   const pts = rt.points || [];
   const histData = pts
@@ -1455,6 +1599,7 @@ function riskTimelineOption(rt, h, compact = false) {
   const last = pts[pts.length - 1];
   const lastMs = new Date(last.at).getTime();
   const DAY = 86400000;
+  // 未来预测线：从最近一次检查的 0 概率起，向 1y/3y/5y 延伸
   const futureData = [[last.at, 0, null]];
   [["1y", 365], ["3y", 1095], ["5y", 1825]].forEach(([hz, days]) => {
     if (last.horizons[hz]) {
@@ -1466,40 +1611,89 @@ function riskTimelineOption(rt, h, compact = false) {
     }
   });
   const base = baseOption();
+  const HIST_COLOR = "#333";     // 历史线：深色实线
+  const FUTURE_COLOR = "#e8860c"; // 未来线：橙色虚线，与历史形成强对比
+  const hLabel = H_LABEL[h] || h;
+  const lastDate = String(last.at).slice(0, 10);
   return {
     ...base,
-    color: [token("--ink"), token("--ink-3")],
-    legend: { top: 0, right: 0, icon: "roundRect", itemWidth: 12, itemHeight: 3,
-              textStyle: { color: token("--ink-2"), fontSize: compact ? 10 : 11 } },
+    color: [HIST_COLOR, FUTURE_COLOR],
+    legend: {
+      top: compact ? 0 : 4, right: 0, icon: "roundRect",
+      itemWidth: 16, itemHeight: 3,
+      textStyle: { color: token("--ink-2"), fontSize: compact ? 10 : 12 },
+      data: [
+        { name: `历史 · ${hLabel}风险`, icon: "roundRect",
+          itemStyle: { color: HIST_COLOR } },
+        { name: `未来 · 预测风险`, icon: "roundRect",
+          itemStyle: { color: FUTURE_COLOR } },
+      ],
+    },
     tooltip: {
       ...base.tooltip,
       formatter: (ps) => ps.map((p) => {
+        const date = String(p.data[0]).slice(0, 10);
         const tag = p.data[2] ? `（${p.data[2]}）` : "";
-        return `${p.marker}${p.seriesName} ${String(p.data[0]).slice(0, 10)}：<b>${p.data[1]}%</b>${tag}`;
+        const prefix = p.seriesIndex === 0 ? "📋 检查日" : "🔮 预测";
+        return `${p.marker}${prefix} ${date}：<b>${p.data[1]}%</b> ${tag}`;
       }).join("<br>"),
     },
-    xAxis: { ...base.xAxis, axisLabel: { ...base.xAxis.axisLabel,
-      formatter: (v) => { const d = new Date(v); return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}`; } } },
-    yAxis: { ...base.yAxis, name: compact ? "" : "风险概率 %", min: 0, max: 100 },
+    xAxis: { ...base.xAxis,
+      axisLabel: { ...base.xAxis.axisLabel,
+        formatter: (v) => {
+          const d = new Date(v);
+          return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}`;
+        },
+      },
+    },
+    yAxis: { ...base.yAxis,
+      name: compact ? "风险概率 %\n最近检查" : "风险概率 %",
+      min: 0, max: 100,
+    },
     series: [
       {
-        name: `历史 · ${H_LABEL[h] || h}风险（回溯）`, type: "line",
-        smooth: 0.2, symbolSize: compact ? 7 : 9,
-        lineStyle: { width: 2, color: token("--ink") },
-        itemStyle: { color: (p) => tierColor(histData[p.dataIndex]?.[2]) },
+        name: `历史 · ${hLabel}风险`, type: "line",
+        smooth: 0.2, symbolSize: compact ? 8 : 10,
+        lineStyle: { width: 2.5, color: HIST_COLOR },
+        itemStyle: { color: (p) => tierColor(histData[p.dataIndex]?.[2]) || HIST_COLOR },
+        areaStyle: compact ? undefined : {
+          color: {
+            type: "linear", x: 0, y: 0, x2: 0, y2: 1,
+            colorStops: [
+              { offset: 0, color: "rgba(50,50,50,0.08)" },
+              { offset: 1, color: "rgba(50,50,50,0)" },
+            ],
+          },
+        },
         data: histData,
         markLine: {
           silent: true, symbol: "none",
-          lineStyle: { color: token("--ink-3"), type: "dotted" },
-          label: { formatter: "最近检查", color: token("--ink-3"), fontSize: 10 },
+          lineStyle: { color: "#999", type: "dotted", width: 1.5 },
+          label: {
+            formatter: `← 历史 | 预测 →\n${lastDate}`,
+            color: "#999", fontSize: compact ? 9 : 11,
+            position: "middle",
+            backgroundColor: "rgba(255,255,255,0.85)",
+            padding: [2, 6],
+            borderRadius: 3,
+          },
           data: [{ xAxis: last.at }],
         },
       },
       {
-        name: "未来累计风险预测", type: "line",
-        smooth: 0.2, symbolSize: compact ? 6 : 8, symbol: "emptyCircle",
-        lineStyle: { width: 2, color: token("--ink-3"), type: "dashed" },
-        itemStyle: { color: token("--ink-3") },
+        name: `未来 · 预测风险`, type: "line",
+        smooth: 0.2, symbolSize: compact ? 7 : 9, symbol: "emptyCircle",
+        lineStyle: { width: 2.5, color: FUTURE_COLOR, type: [8, 4] },
+        itemStyle: { color: FUTURE_COLOR, borderWidth: 2 },
+        areaStyle: compact ? undefined : {
+          color: {
+            type: "linear", x: 0, y: 0, x2: 0, y2: 1,
+            colorStops: [
+              { offset: 0, color: "rgba(232,134,12,0.10)" },
+              { offset: 1, color: "rgba(232,134,12,0)" },
+            ],
+          },
+        },
         data: futureData,
       },
     ],
@@ -1514,9 +1708,10 @@ async function drawRiskTimeline() {
   const has = pts.length > 0;
   $("#riskEmpty").hidden = has;
   $("#riskChart").style.display = has ? "" : "none";
-  $("#riskBasisNote").textContent = has
-    ? `实线：各检查日期当时可得数据的回溯风险（${rt.model_version || ""}）；` +
-      `虚线：自最近一次检查（${pts[pts.length - 1].at}）起，未来 1/3/5 年内的累计风险预测。预测≠确定结果。`
+  $("#riskBasisNote").innerHTML = has
+    ? `<span style="color:#333">━━</span> <b>深色实线</b>：每次检查当天，模型用已有数据算出的历史风险（${rt.model_version || ""})。` +
+      `<span style="color:#e8860c;margin-left:8px">┅┅</span> <b>橙色虚线</b>：从最近检查（${pts[pts.length - 1].at}）起，` +
+      `模型对未来 1/3/5 年的预测。<b>预测≠确定结果</b>。`
     : "";
   if (!has) return;
   chart("riskChart").setOption(riskTimelineOption(rt, state.riskHorizon), true);
@@ -1540,9 +1735,10 @@ async function renderMiniRisk() {
     const d = (p1 - p0) * 100;
     word = Math.abs(d) < 2 ? "基本持平"
       : (d > 0 ? `上升了 ${d.toFixed(1)} 个百分点` : `下降了 ${(-d).toFixed(1)} 个百分点`);
-    $("#riskMiniNote").textContent =
+    $("#riskMiniNote").innerHTML =
       `从 ${first.at} 到 ${last.at} 共 ${pts.length} 次检查，` +
-      `${H_LABEL[h] || h}风险由 ${pct1(p0)} 变为 ${pct1(p1)}（${word}）。虚线为未来预测，预测≠确定结果。`;
+      `${H_LABEL[h] || h}风险由 ${pct1(p0)} → ${pct1(p1)}（${word}）。` +
+      `<span style="color:#e8860c">橙色虚线</span>为未来预测，预测≠确定结果。`;
   } else {
     $("#riskMiniNote").textContent =
       `目前只有 ${pts.length} 个检查时间点；上传更多不同日期的报告后，这里会连成完整轨迹。`;

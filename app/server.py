@@ -1215,6 +1215,54 @@ def build_server(app_data: str | Path):
                 "indicators": [],
             })
 
+        # -------- V3.7：分系统独立风险概率估计 --------
+        # 基于综合模型概率 + 各系统异常严重度权重，为每个系统生成独立的
+        # 风险概率估计值。非独立模型产出，是加权分配的估计值。
+        # 分层切点沿用各时程的 tier_scheme。
+        _abnormal_risks = [sr for sr in system_risks if sr["level"] > 0]
+        if _abnormal_risks and results:
+            # 系统严重度评分：异常项数 * (1 + 最大分级权重) + 恶化加成
+            _scores = []
+            for sr in _abnormal_risks:
+                score = sr["n_abnormal"] * (1.0 + sr["level"] * 0.5) + sr["n_worsened"] * 2.0
+                _scores.append(max(score, 0.1))
+            _total_score = sum(_scores)
+
+            for h_result in results:
+                h = h_result["horizon"]
+                base_prob = h_result["probability"]
+                svc_key = (decision.version, h)
+                tier_scheme = st.services[svc_key].tier_scheme if svc_key in st.services else None
+
+                for i, sr in enumerate(_abnormal_risks):
+                    # 按权重占比分配：严重度高的系统拿到更高的概率
+                    weight = _scores[i] / _total_score
+                    # 加权公式：系统概率 = base * (1 + weight * amplification)
+                    # 最严重的系统概率略高于综合概率；最轻的系统概率低于综合概率
+                    amplification = 1.5  # 放大系数
+                    sys_prob = min(base_prob * (0.5 + weight * amplification * len(_abnormal_risks)), 0.99)
+                    sys_prob = max(sys_prob, 0.01)
+                    sys_tier = tier_scheme.assign(sys_prob) if tier_scheme else "—"
+
+                    # 附加到 system_risks 里
+                    sr.setdefault("risk_by_horizon", {})[h] = {
+                        "probability": round(float(sys_prob), 4),
+                        "risk_tier": sys_tier,
+                    }
+
+            # 稳定系统的风险概率 = 很低的基线
+            for sr in system_risks:
+                if sr["level"] == 0:
+                    for h_result in results:
+                        h = h_result["horizon"]
+                        svc_key = (decision.version, h)
+                        tier_scheme = st.services[svc_key].tier_scheme if svc_key in st.services else None
+                        low_prob = min(h_result["probability"] * 0.15, 0.05)
+                        sr.setdefault("risk_by_horizon", {})[h] = {
+                            "probability": round(float(low_prob), 4),
+                            "risk_tier": tier_scheme.assign(low_prob) if tier_scheme else "低危",
+                        }
+
         # -------- V3.3：AI 综合风险叙述（密钥只读环境变量；输出过合规闸） --------
         # 旧版此处硬编码了 API key 与第三方 base_url —— 已彻底移除：
         # 未配置 ANTHROPIC_API_KEY/OPENAI_API_KEY 时直接走规则叙述，功能不缺。
@@ -1633,6 +1681,142 @@ def _rapid_items(engine, img) -> list[dict]:
     return items
 
 
+def _auto_correct_image(b64_data: str) -> str:
+    """
+    V3.7：自动校正图片方向，包括：
+    1. EXIF Orientation 旋转（手机拍照常见的 90°/180°/270°）
+    2. 轻微倾斜校正（拍照时歪了几度，用 Hough 线检测纠偏）
+
+    输入输出都是纯 base64（无 data:image 前缀）。
+    任何步骤失败都静默返回原始数据，不中断 OCR 流程。
+    """
+    import base64
+    try:
+        import cv2
+        import numpy as np
+    except ImportError:
+        return b64_data
+
+    try:
+        img_bytes = base64.b64decode(b64_data)
+        arr = np.frombuffer(img_bytes, dtype=np.uint8)
+        img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+        if img is None:
+            return b64_data
+
+        corrected = False
+
+        # --- 1. EXIF Orientation 校正（前端可能已处理，这里做兜底） ---
+        try:
+            # 用 piexif 或手动解析 EXIF（简化：直接检查前几个字节）
+            # JPEG EXIF orientation 快速检测
+            if len(img_bytes) > 20 and img_bytes[0:2] == b'\xff\xd8':
+                orientation = _read_jpeg_orientation(img_bytes)
+                if orientation == 3:
+                    img = cv2.rotate(img, cv2.ROTATE_180)
+                    corrected = True
+                elif orientation == 6:
+                    img = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
+                    corrected = True
+                elif orientation == 8:
+                    img = cv2.rotate(img, cv2.ROTATE_90_COUNTERCLOCKWISE)
+                    corrected = True
+        except Exception:
+            pass
+
+        # --- 2. 轻微倾斜校正（±15° 以内） ---
+        try:
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            # 边缘检测
+            edges = cv2.Canny(gray, 50, 150, apertureSize=3)
+            # Hough 线检测
+            lines = cv2.HoughLinesP(edges, 1, np.pi / 180, threshold=100,
+                                    minLineLength=gray.shape[1] // 6, maxLineGap=10)
+            if lines is not None and len(lines) > 0:
+                angles = []
+                for line in lines:
+                    x1, y1, x2, y2 = line[0]
+                    if abs(x2 - x1) < 5:  # 垂直线忽略
+                        continue
+                    angle = np.degrees(np.arctan2(y2 - y1, x2 - x1))
+                    # 只关注接近水平的线（±15°）
+                    if abs(angle) < 15:
+                        angles.append(angle)
+                if len(angles) >= 3:
+                    median_angle = float(np.median(angles))
+                    # 超过 0.5° 才值得校正
+                    if abs(median_angle) > 0.5:
+                        h, w = img.shape[:2]
+                        center = (w // 2, h // 2)
+                        M = cv2.getRotationMatrix2D(center, median_angle, 1.0)
+                        img = cv2.warpAffine(img, M, (w, h),
+                                             flags=cv2.INTER_LINEAR,
+                                             borderMode=cv2.BORDER_REPLICATE)
+                        corrected = True
+                        logger.info("[OCR] 倾斜校正：旋转 %.1f° (%d 条线)", median_angle, len(angles))
+        except Exception:
+            pass
+
+        if not corrected:
+            return b64_data
+
+        # 编码回 base64
+        _, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 92])
+        return base64.b64encode(buf).decode("ascii")
+
+    except Exception as e:
+        logger.warning("[OCR] 图片自动校正失败 (%s)，使用原图", e)
+        return b64_data
+
+
+def _read_jpeg_orientation(data: bytes) -> int:
+    """从 JPEG 字节流中快速读取 EXIF Orientation 标签值。"""
+    try:
+        if len(data) < 14 or data[0:2] != b'\xff\xd8':
+            return 0
+        offset = 2
+        while offset < min(len(data) - 1, 65536):
+            marker = (data[offset] << 8) | data[offset + 1]
+            offset += 2
+            if marker == 0xFFE1:  # APP1 (EXIF)
+                seg_len = (data[offset] << 8) | data[offset + 1]
+                if data[offset + 2:offset + 6] != b'Exif':
+                    return 0
+                tiff_start = offset + 8
+                le = data[tiff_start:tiff_start + 2] == b'II'
+
+                def read16(o):
+                    if le:
+                        return data[o] | (data[o + 1] << 8)
+                    return (data[o] << 8) | data[o + 1]
+
+                def read32(o):
+                    if le:
+                        return data[o] | (data[o+1] << 8) | (data[o+2] << 16) | (data[o+3] << 24)
+                    return (data[o] << 24) | (data[o+1] << 16) | (data[o+2] << 8) | data[o+3]
+
+                ifd_offset = read32(tiff_start + 4)
+                ifd_start = tiff_start + ifd_offset
+                entries = read16(ifd_start)
+                for i in range(min(entries, 20)):
+                    entry = ifd_start + 2 + i * 12
+                    if entry + 12 > len(data):
+                        break
+                    tag = read16(entry)
+                    if tag == 0x0112:
+                        return read16(entry + 8)
+                return 0
+            if marker == 0xFFDA:
+                break
+            if (marker & 0xFF00) != 0xFF00:
+                break
+            skip = (data[offset] << 8) | data[offset + 1]
+            offset += skip
+        return 0
+    except Exception:
+        return 0
+
+
 def _ocr_extract_image(image_b64: str) -> dict:
     """
     通用图片 OCR 识别，返回结构化结果：
@@ -1647,9 +1831,12 @@ def _ocr_extract_image(image_b64: str) -> dict:
 
     clean_b64 = image_b64.split(",", 1)[1] if "," in image_b64 else image_b64
 
+    # V3.7：自动校正图片方向（EXIF 旋转 + 轻微倾斜校正）
+    clean_b64 = _auto_correct_image(clean_b64)
+
     # --- 1. 优先 Vision API（AI 识别化验单准确率远高于本地 OCR） ---
     try:
-        vision = _ai_vision_ocr_extract(image_b64)
+        vision = _ai_vision_ocr_extract(clean_b64)
         if vision:
             lines = []
             collected_at = ""

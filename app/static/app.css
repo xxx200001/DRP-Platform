@@ -863,6 +863,11 @@ details.fold > summary:hover { color: var(--ink); }
 .sys-ind b { font-weight: 600; }
 .sys-ind .worse { color: #f5222d; font-size: 11px; font-style: normal; font-weight: 600; }
 .sys-dir { font-size: 11px; color: var(--ink-3); margin-top: 6px; padding: 4px 8px; background: rgba(0,0,0,.03); border-radius: 4px; }
+/* V3.7: per-system probability display */
+.sys-prob-row { display: flex; align-items: center; gap: 6px; margin: 8px 0 4px; }
+.sys-prob-val { font-size: 20px; font-weight: 700; font-family: var(--mono, 'SF Mono', monospace); }
+.sys-prob-bar { height: 4px; background: #eee; border-radius: 2px; margin: 0 0 6px; overflow: hidden; }
+.sys-prob-bar i { display: block; height: 100%; border-radius: 2px; transition: width .5s cubic-bezier(.22,1,.36,1); }
 .sys-stable { margin-top: 10px; font-size: 13px; color: #52c41a; padding: 8px 12px; background: #f6ffed; border-radius: var(--radius-sm); }
 .ai-narrative {
   margin-top: 14px; padding: 14px 16px;
