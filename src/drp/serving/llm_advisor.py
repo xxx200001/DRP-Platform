@@ -117,7 +117,7 @@ def _call_anthropic(api_key: str, base_url: str, model: str,
         "x-api-key": api_key,
         "anthropic-version": "2023-06-01",
         "Content-Type": "application/json",
-        "User-Agent": "SoulHealth-DRP/3.5",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
     }
     payload = {
         "model": model,
@@ -155,7 +155,7 @@ def _call_gemini_native(api_key: str, base_url: str, model: str,
     headers = {
         "x-goog-api-key": api_key,
         "Content-Type": "application/json",
-        "User-Agent": "SoulHealth-DRP/3.5",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
     }
     full_prompt = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
     payload = {

@@ -1986,7 +1986,7 @@ def _ai_vision_ocr_extract(image_b64: str) -> list | dict:
                 "x-api-key": anthropic_key,
                 "anthropic-version": "2023-06-01",
                 "content-type": "application/json",
-                "User-Agent": "SoulHealth-DRP/3.5",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
             }
             req_body = {
                 "model": claude_model,
@@ -2032,7 +2032,7 @@ def _ai_vision_ocr_extract(image_b64: str) -> list | dict:
             headers = {
                 "Authorization": f"Bearer {openai_key}",
                 "content-type": "application/json",
-                "User-Agent": "SoulHealth-DRP/3.5",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
             }
             req_body = {
                 "model": openai_model,
@@ -2087,7 +2087,7 @@ def _ai_vision_ocr_extract(image_b64: str) -> list | dict:
             headers = {
                 "x-goog-api-key": gemini_key,
                 "content-type": "application/json",
-                "User-Agent": "SoulHealth-DRP/3.5",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
             }
             req_body = {
                 "contents": [
