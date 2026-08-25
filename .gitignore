@@ -9,9 +9,7 @@ dist/
 *.egg-info/
 *.db-shm
 *.db-wal
-
 # 运行时数据（每台机器不同，不入 git）
 app_data/audit/
 app_data/drp.db
-app_data/app.db
 tunnel_url.txt
